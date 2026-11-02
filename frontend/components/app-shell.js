@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { usePathname } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 
 const navigationItems = [
@@ -91,6 +92,7 @@ export default function AppShell({
   title = "Dashboard",
   showPageHeading = true,
 }) {
+  const pathname = usePathname();
   const [isCollapsed, setIsCollapsed] = useState(false);
   const [isMobileNavOpen, setIsMobileNavOpen] = useState(false);
   const mobileToggleRef = useRef(null);
@@ -223,7 +225,15 @@ export default function AppShell({
               key={item.href}
               prefetch={false}
               aria-label={item.label}
-              aria-current={index === 0 ? "page" : undefined}
+              aria-current={
+                item.href === "/"
+                  ? pathname === "/"
+                    ? "page"
+                    : undefined
+                  : pathname === item.href || pathname.startsWith(`${item.href}/`)
+                    ? "page"
+                    : undefined
+              }
               onClick={() => setIsMobileNavOpen(false)}
               title={isCollapsed ? item.label : undefined}
               ref={index === 0 ? firstNavigationLinkRef : undefined}

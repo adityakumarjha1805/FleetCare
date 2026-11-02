@@ -196,7 +196,7 @@ export default function Home() {
   );
 
   return (
-    <AppShell title="Fleet Dashboard" showPageHeading={false}>
+    <AppShell title="Fleet overview" showPageHeading={false}>
       <div className="dashboard-page">
         <section className="dashboard-intro" aria-labelledby="dashboard-title">
           <div>

@@ -8,6 +8,11 @@ const navigationItems = [
   { label: "Dashboard", href: "/", icon: "dashboard" },
   { label: "Vehicles", href: "/vehicles", icon: "vehicles" },
   { label: "Diagnostics", href: "/diagnostics", icon: "diagnostics" },
+  {
+    label: "AI Diagnostic Agent",
+    href: "/ai-diagnostic-agent",
+    icon: "agent",
+  },
   { label: "Maintenance", href: "/maintenance", icon: "maintenance" },
   { label: "Service Requests", href: "/service-requests", icon: "requests" },
 ];
@@ -48,6 +53,13 @@ function NavigationIcon({ name }) {
         <svg {...commonProps}>
           <path d="M3.5 12h4l2.2-6 4.5 12 2.2-6h4" />
           <circle cx="12" cy="12" r="9" />
+        </svg>
+      );
+    case "agent":
+      return (
+        <svg {...commonProps}>
+          <path d="M12 3.5v3m-6.1 1.1L3.8 5.5m14.1 2.1 2.1-2.1M4 13h3l1.5-3 3 7 1.5-4h7" />
+          <path d="M5 19.5h14a2 2 0 0 0 2-2v-7a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v7a2 2 0 0 0 2 2Z" />
         </svg>
       );
     case "maintenance":

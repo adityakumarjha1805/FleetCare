@@ -3,83 +3,13 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import AppShell from "./app-shell";
 import { initialVehicleData } from "./mock-fleet-data";
+import { sampleDiagnosticData } from "./mock-diagnostic-data";
+import { getSampleCodeKnowledge } from "../lib/diagnostic-sample-analysis";
 
 const severityOptions = ["Critical", "High", "Medium", "Low"];
 const severityFilters = ["All", ...severityOptions];
 const statusFilters = ["All", "Active", "Resolved"];
 const maximumOdometerKm = 2_000_000;
-
-const diagnosticExplanations = {
-  P0301: {
-    title: "Cylinder 1 Misfire Detected",
-    explanation:
-      "The engine control system has detected a misfire associated with cylinder 1.",
-    possibleCauses: [
-      "Faulty spark plug.",
-      "Ignition coil issue.",
-      "Fuel delivery problem.",
-    ],
-    recommendedAction: "Arrange a qualified mechanic inspection.",
-  },
-};
-
-const sampleDiagnosticData = [
-  {
-    id: "diagnostic-001",
-    vehicleId: "vehicle-003",
-    code: "P0301",
-    issueDescription: "Cylinder 1 misfire detected",
-    severity: "Critical",
-    dateDetected: "2026-10-30",
-    odometerKm: 184520,
-    notes: "Driver reported intermittent engine vibration.",
-    status: "Active",
-  },
-  {
-    id: "diagnostic-002",
-    vehicleId: "vehicle-001",
-    code: "P0420",
-    issueDescription: "Catalyst system efficiency below threshold",
-    severity: "High",
-    dateDetected: "2026-10-28",
-    odometerKm: 48210,
-    notes: "",
-    status: "Active",
-  },
-  {
-    id: "diagnostic-003",
-    vehicleId: "vehicle-005",
-    code: "SPN 3251",
-    issueDescription: "Diesel particulate filter soot level high",
-    severity: "Medium",
-    dateDetected: "2026-10-26",
-    odometerKm: 236840,
-    notes: "Sample telematics event.",
-    status: "Active",
-  },
-  {
-    id: "diagnostic-004",
-    vehicleId: "vehicle-002",
-    code: "P0171",
-    issueDescription: "System too lean, bank 1",
-    severity: "Low",
-    dateDetected: "2026-10-22",
-    odometerKm: 76240,
-    notes: "",
-    status: "Resolved",
-  },
-  {
-    id: "diagnostic-005",
-    vehicleId: "vehicle-004",
-    code: "P0301",
-    issueDescription: "Cylinder 1 misfire detected",
-    severity: "High",
-    dateDetected: "2026-10-20",
-    odometerKm: 21680,
-    notes: "Previously recorded sample diagnostic.",
-    status: "Resolved",
-  },
-];
 
 const emptyDiagnosticForm = {
   vehicleId: "",
@@ -142,7 +72,7 @@ function DiagnosticDialog({
       )
     : null;
   const explanation = selectedRecord
-    ? diagnosticExplanations[selectedRecord.code]
+    ? getSampleCodeKnowledge(selectedRecord.code)
     : null;
 
   return (
@@ -677,7 +607,7 @@ export default function DiagnosticManagement() {
       vehicleId: trimmedValues.vehicleId,
       code,
       issueDescription:
-        diagnosticExplanations[code]?.title ??
+        getSampleCodeKnowledge(code)?.title ??
         "Diagnostic code recorded for mechanic review",
       severity: trimmedValues.severity,
       dateDetected: trimmedValues.dateDetected,

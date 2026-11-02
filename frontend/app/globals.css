@@ -52,6 +52,7 @@ button:focus-visible,
 a:focus-visible,
 input:focus-visible,
 select:focus-visible,
+textarea:focus-visible,
 [tabindex="-1"]:focus-visible {
   outline: 3px solid #8eabff;
   outline-offset: 3px;
@@ -1672,5 +1673,563 @@ select:focus-visible,
   *::after {
     scroll-behavior: auto !important;
     transition-duration: 0.01ms !important;
+  }
+}
+
+.diagnostic-management {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 23px;
+}
+
+.diagnostic-page-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 20px;
+}
+
+.diagnostic-page-header .primary-action {
+  cursor: pointer;
+}
+
+.diagnostic-page-title {
+  margin-bottom: 7px;
+}
+
+.diagnostic-page-description {
+  max-width: 640px;
+  margin: 0;
+  color: #647087;
+  font-size: 14px;
+  line-height: 1.6;
+}
+
+.diagnostic-data-note,
+.diagnostic-safety-note {
+  margin: 7px 0 0;
+  color: var(--muted);
+  font-size: 11px;
+  line-height: 1.55;
+}
+
+.diagnostic-summary-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 13px;
+}
+
+.diagnostic-summary-card {
+  display: flex;
+  min-width: 0;
+  min-height: 126px;
+  flex-direction: column;
+  align-items: flex-start;
+  padding: 18px;
+  border: 1px solid var(--line);
+  border-radius: 11px;
+  background: var(--surface);
+}
+
+.diagnostic-summary-label {
+  color: #6f7b90;
+  font-size: 11px;
+  font-weight: 550;
+}
+
+.diagnostic-summary-card strong {
+  margin-top: 9px;
+  color: #27334a;
+  font-size: 26px;
+  font-weight: 650;
+  letter-spacing: -0.8px;
+  line-height: 1;
+}
+
+.diagnostic-summary-detail {
+  margin-top: 8px;
+  color: #8994a8;
+  font-size: 10px;
+}
+
+.diagnostic-summary-critical strong {
+  color: #b5414b;
+}
+
+.diagnostic-summary-active strong {
+  color: #9c6819;
+}
+
+.diagnostic-list-panel {
+  min-width: 0;
+  padding: 21px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--surface);
+}
+
+.diagnostic-list-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  margin-bottom: 18px;
+}
+
+.diagnostic-list-heading h2 {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 650;
+  letter-spacing: -0.2px;
+}
+
+.diagnostic-list-heading p {
+  margin: 5px 0 0;
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.diagnostic-result-count {
+  flex: 0 0 auto;
+  color: #6f7b90;
+  font-size: 11px;
+}
+
+.diagnostic-toolbar {
+  display: flex;
+  align-items: flex-end;
+  gap: 13px;
+  margin-bottom: 18px;
+}
+
+.diagnostic-search-field {
+  min-width: 200px;
+}
+
+.diagnostic-toolbar .vehicle-filter-field {
+  width: min(185px, 25%);
+}
+
+.diagnostic-table-wrap {
+  width: 100%;
+  overflow-x: auto;
+  border: 1px solid #edf0f5;
+  border-radius: 9px;
+}
+
+.diagnostic-table {
+  width: 100%;
+  min-width: 950px;
+  border-collapse: collapse;
+  text-align: left;
+}
+
+.diagnostic-table th {
+  padding: 12px 13px;
+  border-bottom: 1px solid #e8ecf2;
+  background: #f9fafc;
+  color: #788398;
+  font-size: 10px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.diagnostic-table td {
+  padding: 13px;
+  border-bottom: 1px solid #eff1f5;
+  color: #566278;
+  font-size: 11px;
+  vertical-align: middle;
+}
+
+.diagnostic-table tbody tr:last-child td {
+  border-bottom: 0;
+}
+
+.diagnostic-table time {
+  white-space: nowrap;
+}
+
+.diagnostic-vehicle-name,
+.diagnostic-registration {
+  display: block;
+}
+
+.diagnostic-vehicle-name {
+  color: #354158;
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.diagnostic-registration {
+  margin-top: 4px;
+  color: #8994a8;
+  font-size: 10px;
+  letter-spacing: 0.2px;
+}
+
+.diagnostic-code {
+  display: inline-flex;
+  padding: 5px 7px;
+  border: 1px solid #e2e8f4;
+  border-radius: 6px;
+  background: #f5f7fc;
+  color: #3e5eae;
+  font-size: 10px;
+  font-weight: 650;
+  white-space: nowrap;
+}
+
+.diagnostic-table-issue {
+  max-width: 230px;
+  line-height: 1.45;
+}
+
+.diagnostic-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 8px;
+  border: 1px solid transparent;
+  border-radius: 99px;
+  font-size: 10px;
+  font-weight: 600;
+  line-height: 1.2;
+  white-space: nowrap;
+}
+
+.diagnostic-badge-dot {
+  flex: 0 0 7px;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: currentColor;
+}
+
+.diagnostic-badge-critical {
+  border-color: #f2d4d7;
+  background: #fff1f2;
+  color: #b5414b;
+}
+
+.diagnostic-badge-high {
+  border-color: #f3dfc5;
+  background: #fff7eb;
+  color: #a45b20;
+}
+
+.diagnostic-badge-medium {
+  border-color: #f3e3c3;
+  background: #fff8eb;
+  color: #9c6819;
+}
+
+.diagnostic-badge-low {
+  border-color: #dce5f6;
+  background: #f2f6fd;
+  color: #4a679b;
+}
+
+.diagnostic-badge-active {
+  border-color: #f3e3c3;
+  background: #fff8eb;
+  color: #8d641f;
+}
+
+.diagnostic-badge-resolved {
+  border-color: #d3eee3;
+  background: #eff9f5;
+  color: #267c5c;
+}
+
+.diagnostic-record-actions {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  white-space: nowrap;
+}
+
+.diagnostic-record-actions .text-action,
+.diagnostic-resolve-link {
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: #4569d4;
+  font-size: 10px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.diagnostic-resolve-link {
+  color: #6f7b90;
+}
+
+.diagnostic-mobile-list {
+  display: none;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.diagnostic-detail-status {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 17px;
+}
+
+.diagnostic-dialog {
+  width: min(690px, calc(100vw - 32px));
+}
+
+.diagnostic-dialog .vehicle-form,
+.diagnostic-dialog .vehicle-details {
+  padding: 25px;
+}
+
+.diagnostic-dialog .form-field input,
+.diagnostic-dialog .form-field select,
+.diagnostic-dialog .form-field textarea {
+  width: 100%;
+  min-height: 42px;
+  border: 1px solid #dfe4ec;
+  border-radius: 8px;
+  background: #fff;
+  color: var(--foreground);
+  font: inherit;
+  font-size: 12px;
+}
+
+.diagnostic-dialog .form-field textarea {
+  min-height: 88px;
+  padding: 10px 11px;
+  resize: vertical;
+}
+
+.diagnostic-dialog .field-help {
+  color: #7d899d;
+  font-size: 10px;
+  line-height: 1.4;
+}
+
+.diagnostic-dialog .form-field input[aria-invalid="true"],
+.diagnostic-dialog .form-field select[aria-invalid="true"] {
+  border-color: #d46870;
+}
+
+.diagnostic-caveat {
+  margin: 17px 0 0;
+  padding: 11px 12px;
+  border: 1px solid #e3eaf9;
+  border-radius: 8px;
+  background: #f5f7fd;
+  color: #5d6980;
+  font-size: 11px;
+  line-height: 1.55;
+}
+
+.code-explanation {
+  margin-top: 18px;
+  padding: 17px;
+  border: 1px solid #e7ebf3;
+  border-radius: 10px;
+  background: #fbfcfe;
+}
+
+.code-explanation .eyebrow {
+  margin-bottom: 7px;
+}
+
+.code-explanation h3 {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 650;
+}
+
+.code-explanation h4 {
+  margin: 14px 0 6px;
+  color: #354158;
+  font-size: 11px;
+  font-weight: 650;
+}
+
+.code-explanation p,
+.code-explanation li {
+  color: #647087;
+  font-size: 11px;
+  line-height: 1.55;
+}
+
+.code-explanation p {
+  margin: 7px 0 0;
+}
+
+.code-explanation ul {
+  margin: 0;
+  padding-left: 18px;
+}
+
+.code-explanation .diagnostic-caveat {
+  margin-top: 12px;
+}
+
+.resolve-button {
+  margin-right: auto;
+  cursor: pointer;
+}
+
+.diagnostic-safety-note {
+  max-width: 850px;
+  margin: -7px 0 0;
+}
+
+@media (max-width: 900px) {
+  .diagnostic-toolbar {
+    flex-wrap: wrap;
+  }
+
+  .diagnostic-toolbar .diagnostic-search-field {
+    flex-basis: 100%;
+  }
+
+  .diagnostic-toolbar .vehicle-filter-field {
+    flex: 1 1 160px;
+    width: auto;
+  }
+}
+
+@media (max-width: 760px) {
+  .diagnostic-management {
+    gap: 20px;
+  }
+
+  .diagnostic-page-header {
+    flex-direction: column;
+    gap: 14px;
+  }
+
+  .diagnostic-summary-grid {
+    gap: 10px;
+  }
+
+  .diagnostic-summary-card {
+    min-height: 116px;
+    padding: 14px;
+  }
+
+  .diagnostic-list-panel {
+    padding: 17px;
+  }
+
+  .diagnostic-table-wrap {
+    display: none;
+  }
+
+  .diagnostic-mobile-list {
+    display: grid;
+    gap: 10px;
+  }
+
+  .diagnostic-mobile-card {
+    min-width: 0;
+    padding: 14px;
+    border: 1px solid #e8ecf2;
+    border-radius: 9px;
+  }
+
+  .diagnostic-mobile-card-heading {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 10px;
+  }
+
+  .diagnostic-mobile-card-heading h3 {
+    margin: 0;
+    color: #354158;
+    font-size: 12px;
+    font-weight: 650;
+    line-height: 1.4;
+    overflow-wrap: anywhere;
+  }
+
+  .diagnostic-mobile-code {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    margin: 13px 0 0;
+  }
+
+  .diagnostic-mobile-issue {
+    margin: 10px 0 0;
+    color: #566278;
+    font-size: 11px;
+    line-height: 1.5;
+    overflow-wrap: anywhere;
+  }
+
+  .diagnostic-mobile-date {
+    display: block;
+    margin-top: 8px;
+    color: #8994a8;
+    font-size: 10px;
+  }
+
+  .diagnostic-mobile-card .diagnostic-record-actions {
+    margin-top: 13px;
+  }
+}
+
+@media (max-width: 560px) {
+  .diagnostic-summary-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .diagnostic-summary-card {
+    min-height: 100px;
+  }
+
+  .diagnostic-summary-card strong {
+    margin-top: 7px;
+  }
+
+  .diagnostic-list-heading {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 6px;
+    margin-bottom: 14px;
+  }
+
+  .diagnostic-toolbar {
+    align-items: stretch;
+    flex-direction: column;
+    gap: 11px;
+  }
+
+  .diagnostic-toolbar .diagnostic-search-field,
+  .diagnostic-toolbar .vehicle-filter-field {
+    width: 100%;
+    min-height: 42px;
+  }
+
+  .diagnostic-list-panel {
+    padding: 14px;
+  }
+
+  .diagnostic-dialog .vehicle-form,
+  .diagnostic-dialog .vehicle-details {
+    padding: 19px;
+  }
+}
+
+@media (max-width: 400px) {
+  .diagnostic-mobile-card {
+    padding: 12px;
+  }
+
+  .diagnostic-mobile-card-heading {
+    flex-direction: column;
   }
 }

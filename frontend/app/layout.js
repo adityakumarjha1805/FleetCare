@@ -12,7 +12,7 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata = {
-  title: "Dashboard | FleetCare",
+  title: "Fleet Dashboard | FleetCare",
   description: "Manage fleet maintenance and vehicle diagnostics with FleetCare.",
 };
 

@@ -86,7 +86,11 @@ function BrandMark() {
   );
 }
 
-export default function AppShell({ children }) {
+export default function AppShell({
+  children,
+  title = "Dashboard",
+  showPageHeading = true,
+}) {
   const [isCollapsed, setIsCollapsed] = useState(false);
   const [isMobileNavOpen, setIsMobileNavOpen] = useState(false);
   const mobileToggleRef = useRef(null);
@@ -294,7 +298,7 @@ export default function AppShell({ children }) {
                 />
               </svg>
             </button>
-            <span className="topbar-context">Dashboard</span>
+            <span className="topbar-context">{title}</span>
           </div>
           <div className="topbar-end">
             <span className="workspace-label">Operations workspace</span>
@@ -303,7 +307,7 @@ export default function AppShell({ children }) {
 
         <main className="main-content" id="main-content" tabIndex="-1">
           <div className="page-container">
-            <h1 className="page-heading">Dashboard</h1>
+            {showPageHeading && <h1 className="page-heading">{title}</h1>}
             {children}
           </div>
         </main>

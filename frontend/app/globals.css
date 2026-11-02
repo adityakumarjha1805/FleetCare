@@ -2233,3 +2233,472 @@ textarea:focus-visible,
     flex-direction: column;
   }
 }
+
+.maintenance-management {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 23px;
+}
+
+.maintenance-page-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 20px;
+}
+
+.maintenance-page-header .primary-action {
+  cursor: pointer;
+}
+
+.maintenance-page-title {
+  margin-bottom: 7px;
+}
+
+.maintenance-page-description {
+  max-width: 640px;
+  margin: 0;
+  color: #647087;
+  font-size: 14px;
+  line-height: 1.6;
+}
+
+.maintenance-data-note {
+  margin: 7px 0 0;
+  color: var(--muted);
+  font-size: 11px;
+  line-height: 1.55;
+}
+
+.maintenance-summary-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 13px;
+}
+
+.maintenance-summary-card {
+  display: flex;
+  min-width: 0;
+  min-height: 126px;
+  flex-direction: column;
+  align-items: flex-start;
+  padding: 18px;
+  border: 1px solid var(--line);
+  border-radius: 11px;
+  background: var(--surface);
+}
+
+.maintenance-summary-label {
+  color: #6f7b90;
+  font-size: 11px;
+  font-weight: 550;
+  line-height: 1.4;
+}
+
+.maintenance-summary-card strong {
+  margin-top: 9px;
+  color: #27334a;
+  font-size: 26px;
+  font-weight: 650;
+  letter-spacing: -0.8px;
+  line-height: 1;
+}
+
+.maintenance-summary-detail {
+  margin-top: 8px;
+  color: #8994a8;
+  font-size: 10px;
+  line-height: 1.4;
+}
+
+.maintenance-summary-upcoming strong {
+  color: #4a679b;
+}
+
+.maintenance-summary-overdue strong {
+  color: #b5414b;
+}
+
+.maintenance-summary-completed strong {
+  color: #267c5c;
+}
+
+.maintenance-list-panel {
+  min-width: 0;
+  padding: 21px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--surface);
+}
+
+.maintenance-list-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  margin-bottom: 18px;
+}
+
+.maintenance-list-heading h2 {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 650;
+  letter-spacing: -0.2px;
+}
+
+.maintenance-list-heading p {
+  margin: 5px 0 0;
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.maintenance-result-count {
+  flex: 0 0 auto;
+  color: #6f7b90;
+  font-size: 11px;
+}
+
+.maintenance-toolbar {
+  display: flex;
+  align-items: flex-end;
+  gap: 13px;
+  margin-bottom: 18px;
+}
+
+.maintenance-search-field {
+  min-width: 200px;
+}
+
+.maintenance-toolbar .vehicle-filter-field {
+  width: min(185px, 25%);
+}
+
+.maintenance-table-wrap {
+  width: 100%;
+  overflow-x: auto;
+  border: 1px solid #edf0f5;
+  border-radius: 9px;
+}
+
+.maintenance-table {
+  width: 100%;
+  min-width: 960px;
+  border-collapse: collapse;
+  text-align: left;
+}
+
+.maintenance-table th {
+  padding: 12px 13px;
+  border-bottom: 1px solid #e8ecf2;
+  background: #f9fafc;
+  color: #788398;
+  font-size: 10px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.maintenance-table td {
+  padding: 13px;
+  border-bottom: 1px solid #eff1f5;
+  color: #566278;
+  font-size: 11px;
+  vertical-align: middle;
+}
+
+.maintenance-table tbody tr:last-child td {
+  border-bottom: 0;
+}
+
+.maintenance-table time,
+.maintenance-table td:nth-child(5) {
+  white-space: nowrap;
+}
+
+.maintenance-vehicle-name {
+  display: block;
+  color: #354158;
+  font-size: 11px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.maintenance-table-description {
+  max-width: 240px;
+  line-height: 1.45;
+}
+
+.maintenance-status-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 8px;
+  border: 1px solid transparent;
+  border-radius: 99px;
+  font-size: 10px;
+  font-weight: 600;
+  line-height: 1.2;
+  white-space: nowrap;
+}
+
+.maintenance-status-upcoming {
+  border-color: #dce5f6;
+  background: #f2f6fd;
+  color: #4a679b;
+}
+
+.maintenance-status-overdue {
+  border-color: #f2d4d7;
+  background: #fff1f2;
+  color: #b5414b;
+}
+
+.maintenance-status-completed {
+  border-color: #d3eee3;
+  background: #eff9f5;
+  color: #267c5c;
+}
+
+.maintenance-record-actions {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  white-space: nowrap;
+}
+
+.maintenance-record-actions .text-action,
+.maintenance-complete-link {
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: #4569d4;
+  font-size: 10px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.maintenance-complete-link {
+  color: #6f7b90;
+}
+
+.maintenance-mobile-list {
+  display: none;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.maintenance-detail-status {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 17px;
+}
+
+.maintenance-dialog {
+  width: min(690px, calc(100vw - 32px));
+}
+
+.maintenance-dialog .vehicle-form,
+.maintenance-dialog .vehicle-details {
+  padding: 25px;
+}
+
+.maintenance-dialog .form-field input,
+.maintenance-dialog .form-field select,
+.maintenance-dialog .form-field textarea {
+  width: 100%;
+  min-height: 42px;
+  border: 1px solid #dfe4ec;
+  border-radius: 8px;
+  background: #fff;
+  color: var(--foreground);
+  font: inherit;
+  font-size: 12px;
+}
+
+.maintenance-dialog .form-field textarea {
+  min-height: 88px;
+  padding: 10px 11px;
+  resize: vertical;
+}
+
+.maintenance-dialog .field-help {
+  color: #7d899d;
+  font-size: 10px;
+  line-height: 1.4;
+}
+
+.maintenance-dialog .form-field input[aria-invalid="true"],
+.maintenance-dialog .form-field select[aria-invalid="true"],
+.maintenance-dialog .form-field textarea[aria-invalid="true"] {
+  border-color: #d46870;
+}
+
+.maintenance-dialog .form-field textarea:focus-visible {
+  outline: 3px solid #8eabff;
+  outline-offset: 3px;
+}
+
+.maintenance-dialog .resolve-button {
+  margin-right: auto;
+  cursor: pointer;
+}
+
+@media (max-width: 1120px) {
+  .maintenance-summary-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 900px) {
+  .maintenance-toolbar {
+    flex-wrap: wrap;
+  }
+
+  .maintenance-toolbar .maintenance-search-field {
+    flex-basis: 100%;
+  }
+
+  .maintenance-toolbar .vehicle-filter-field {
+    flex: 1 1 160px;
+    width: auto;
+  }
+}
+
+@media (max-width: 760px) {
+  .maintenance-management {
+    gap: 20px;
+  }
+
+  .maintenance-page-header {
+    flex-direction: column;
+    gap: 14px;
+  }
+
+  .maintenance-summary-grid {
+    gap: 10px;
+  }
+
+  .maintenance-summary-card {
+    min-height: 116px;
+    padding: 14px;
+  }
+
+  .maintenance-list-panel {
+    padding: 17px;
+  }
+
+  .maintenance-table-wrap {
+    display: none;
+  }
+
+  .maintenance-mobile-list {
+    display: grid;
+    gap: 10px;
+  }
+
+  .maintenance-mobile-card {
+    min-width: 0;
+    padding: 14px;
+    border: 1px solid #e8ecf2;
+    border-radius: 9px;
+  }
+
+  .maintenance-mobile-heading {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 10px;
+  }
+
+  .maintenance-mobile-heading h3 {
+    margin: 0;
+    color: #354158;
+    font-size: 12px;
+    font-weight: 650;
+    line-height: 1.4;
+    overflow-wrap: anywhere;
+  }
+
+  .maintenance-mobile-type {
+    margin: 13px 0 0;
+    color: #354158;
+    font-size: 11px;
+    font-weight: 650;
+  }
+
+  .maintenance-mobile-description {
+    margin: 7px 0 0;
+    color: #647087;
+    font-size: 11px;
+    line-height: 1.5;
+    overflow-wrap: anywhere;
+  }
+
+  .maintenance-mobile-meta {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: space-between;
+    gap: 7px 12px;
+    margin-top: 10px;
+    color: #8994a8;
+    font-size: 10px;
+  }
+
+  .maintenance-mobile-card .maintenance-record-actions {
+    margin-top: 13px;
+  }
+
+  .maintenance-dialog .vehicle-form,
+  .maintenance-dialog .vehicle-details {
+    padding: 19px;
+  }
+}
+
+@media (max-width: 560px) {
+  .maintenance-summary-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .maintenance-summary-card {
+    min-height: 100px;
+  }
+
+  .maintenance-summary-card strong {
+    margin-top: 7px;
+  }
+
+  .maintenance-list-heading {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 6px;
+    margin-bottom: 14px;
+  }
+
+  .maintenance-toolbar {
+    align-items: stretch;
+    flex-direction: column;
+    gap: 11px;
+  }
+
+  .maintenance-toolbar .maintenance-search-field,
+  .maintenance-toolbar .vehicle-filter-field {
+    width: 100%;
+    min-height: 42px;
+  }
+
+  .maintenance-list-panel {
+    padding: 14px;
+  }
+}
+
+@media (max-width: 400px) {
+  .maintenance-mobile-card {
+    padding: 12px;
+  }
+
+  .maintenance-mobile-heading {
+    flex-direction: column;
+  }
+}

@@ -62,10 +62,10 @@ after(async () => {
   }
 });
 
-async function post(path, body) {
+async function post(path, body, headers = {}) {
   return fetch(`${baseUrl}/api/auth/${path}`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: { 'Content-Type': 'application/json', ...headers },
     body: JSON.stringify(body),
   });
 }
@@ -120,19 +120,25 @@ test('registration rejects invalid fields and weak passwords', async () => {
   }
 });
 
-test('login returns a signed token and safe user profile', async () => {
+test('login sets an HttpOnly authentication cookie and returns a safe profile', async () => {
   const response = await post('login', {
     email: ' MANAGER@EXAMPLE.COM ',
     password: 'FleetCare123',
   });
   const body = await response.json();
-  const claims = jwt.verify(body.data.token, config.jwtSecret, {
+  const setCookie = response.headers.get('set-cookie');
+  const token = setCookie.match(/fleetcareAccessToken=([^;]+)/)?.[1];
+  const claims = jwt.verify(token, config.jwtSecret, {
     algorithms: ['HS256'],
     issuer: 'fleetcare-api',
     audience: 'fleetcare-client',
   });
 
   assert.equal(response.status, 200);
+  assert.match(setCookie, /HttpOnly/i);
+  assert.match(setCookie, /SameSite=Lax/i);
+  assert.match(setCookie, /Path=\/api/i);
+  assert.equal(Object.hasOwn(body.data, 'token'), false);
   assert.equal(claims.sub, users.get('manager@example.com')._id.toString());
   assert.equal(Object.hasOwn(body.data.user, 'password'), false);
   assert.deepEqual(Object.keys(body.data.user).sort(), [
@@ -213,11 +219,11 @@ test('current-user endpoint returns the authenticated profile, not a client-supp
     email: 'second@example.com',
     password: 'FleetCare123',
   });
-  const { token } = (await login.json()).data;
+  const cookie = login.headers.get('set-cookie').split(';')[0];
   const response = await fetch(
     `${baseUrl}/api/auth/me?userId=${users.get('manager@example.com')._id}`,
     {
-      headers: { Authorization: `Bearer ${token}` },
+      headers: { Cookie: cookie },
     },
   );
   const body = await response.json();
@@ -226,4 +232,68 @@ test('current-user endpoint returns the authenticated profile, not a client-supp
   assert.equal(body.data.user.email, 'second@example.com');
   assert.equal(body.data.user.id, users.get('second@example.com')._id.toString());
   assert.equal(Object.hasOwn(body.data.user, 'password'), false);
+});
+
+test('HttpOnly cookie authenticates read requests and rejects cross-origin writes', async () => {
+  const login = await post('login', {
+    email: 'manager@example.com',
+    password: 'FleetCare123',
+  });
+  const setCookie = login.headers.get('set-cookie');
+  const cookie = setCookie.split(';')[0];
+
+  const currentUser = await fetch(`${baseUrl}/api/auth/me`, {
+    headers: { Cookie: cookie },
+  });
+  assert.equal(currentUser.status, 200);
+  assert.equal((await currentUser.json()).data.user.email, 'manager@example.com');
+
+  const rejectedWrite = await fetch(`${baseUrl}/api/vehicles`, {
+    method: 'POST',
+    headers: {
+      Cookie: cookie,
+      'Content-Type': 'application/json',
+      Origin: 'https://untrusted.example',
+    },
+    body: JSON.stringify({}),
+  });
+  assert.equal(rejectedWrite.status, 403);
+  assert.equal((await rejectedWrite.json()).error.code, 'CSRF_CHECK_FAILED');
+
+  const missingOriginWrite = await fetch(`${baseUrl}/api/vehicles`, {
+    method: 'POST',
+    headers: {
+      Cookie: cookie,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({}),
+  });
+  assert.equal(missingOriginWrite.status, 403);
+
+  const trustedOriginWrite = await fetch(`${baseUrl}/api/vehicles`, {
+    method: 'POST',
+    headers: {
+      Cookie: cookie,
+      'Content-Type': 'application/json',
+      Origin: process.env.FRONTEND_ORIGIN,
+    },
+    body: JSON.stringify({}),
+  });
+  assert.notEqual(trustedOriginWrite.status, 403);
+});
+
+test('logout clears the authentication cookie and requires the configured origin', async () => {
+  const denied = await post('logout');
+  assert.equal(denied.status, 403);
+
+  const response = await post('logout', undefined, {
+    Origin: process.env.FRONTEND_ORIGIN,
+  });
+  const body = await response.json();
+
+  assert.equal(response.status, 200);
+  assert.equal(body.data.loggedOut, true);
+  assert.match(response.headers.get('set-cookie'), /fleetcareAccessToken=/);
+  assert.match(response.headers.get('set-cookie'), /Path=\/api/i);
+  assert.match(response.headers.get('set-cookie'), /Expires=/i);
 });

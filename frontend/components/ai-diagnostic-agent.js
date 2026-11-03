@@ -2,9 +2,8 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import AppShell from "./app-shell";
-import { initialVehicleData } from "./mock-fleet-data";
-import { sampleDiagnosticData } from "./mock-diagnostic-data";
-import { analyzeSampleDiagnostic } from "../lib/diagnostic-sample-analysis";
+import { analyzeDiagnostic, fetchDiagnostics } from "../lib/diagnostics-api";
+import { fetchVehicles } from "../lib/vehicles-api";
 
 function formatOdometer(value) {
   return new Intl.NumberFormat("en-US").format(value);
@@ -15,8 +14,9 @@ function formatDate(value) {
     year: "numeric",
     month: "short",
     day: "numeric",
-    timeZone: "UTC",
-  }).format(new Date(`${value}T00:00:00Z`));
+    hour: "numeric",
+    minute: "2-digit",
+  }).format(new Date(value));
 }
 
 function AnalysisSection({ title, children, className = "" }) {
@@ -29,48 +29,63 @@ function AnalysisSection({ title, children, className = "" }) {
 }
 
 export default function AIDiagnosticAgent() {
+  const [vehicles, setVehicles] = useState([]);
+  const [diagnostics, setDiagnostics] = useState([]);
   const [selectedVehicleId, setSelectedVehicleId] = useState("");
   const [selectedDiagnosticId, setSelectedDiagnosticId] = useState("");
   const [analysis, setAnalysis] = useState(null);
-  const [isLoading, setIsLoading] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
+  const [isAnalyzing, setIsAnalyzing] = useState(false);
+  const [refreshKey, setRefreshKey] = useState(0);
   const [errorMessage, setErrorMessage] = useState("");
-  const timerRef = useRef(null);
+  const [loadError, setLoadError] = useState("");
   const diagnosticSelectRef = useRef(null);
 
+  useEffect(() => {
+    const controller = new AbortController();
+
+    async function loadData() {
+      setIsLoading(true);
+      setLoadError("");
+      try {
+        const [loadedVehicles, loadedDiagnostics] = await Promise.all([
+          fetchVehicles({ signal: controller.signal }),
+          fetchDiagnostics({ signal: controller.signal }),
+        ]);
+        if (!controller.signal.aborted) {
+          setVehicles(loadedVehicles);
+          setDiagnostics(loadedDiagnostics);
+        }
+      } catch (error) {
+        if (!controller.signal.aborted) {
+          setLoadError(
+            error.message || "Unable to load saved diagnostic records.",
+          );
+        }
+      } finally {
+        if (!controller.signal.aborted) setIsLoading(false);
+      }
+    }
+
+    loadData();
+    return () => controller.abort();
+  }, [refreshKey]);
+
   const availableDiagnostics = useMemo(
-    () =>
-      sampleDiagnosticData.filter(
-        (record) => record.vehicleId === selectedVehicleId,
-      ),
-    [selectedVehicleId],
+    () => diagnostics.filter((record) => record.vehicleId === selectedVehicleId),
+    [diagnostics, selectedVehicleId],
   );
 
-  const selectedVehicle = initialVehicleData.find(
+  const selectedVehicle = vehicles.find(
     (vehicle) => vehicle.id === selectedVehicleId,
   );
   const selectedDiagnostic = availableDiagnostics.find(
     (record) => record.id === selectedDiagnosticId,
   );
-  const analyzedVehicle = analysis
-    ? initialVehicleData.find(
-        (vehicle) => vehicle.id === analysis.record.vehicleId,
-      )
-    : null;
-
-  useEffect(
-    () => () => {
-      if (timerRef.current) window.clearTimeout(timerRef.current);
-    },
-    [],
-  );
+  const analyzedVehicle = analysis?.vehicle;
 
   function resetAnalysis() {
-    if (timerRef.current) {
-      window.clearTimeout(timerRef.current);
-      timerRef.current = null;
-    }
     setAnalysis(null);
-    setIsLoading(false);
     setErrorMessage("");
     setSelectedDiagnosticId("");
     window.setTimeout(() => diagnosticSelectRef.current?.focus(), 0);
@@ -89,35 +104,35 @@ export default function AIDiagnosticAgent() {
     setErrorMessage("");
   }
 
-  function handleAnalyze() {
+  async function handleAnalyze() {
     if (!selectedVehicle || !selectedDiagnostic) {
       setErrorMessage("Select a vehicle and diagnostic record to continue.");
       return;
     }
 
-    if (timerRef.current) window.clearTimeout(timerRef.current);
-    setIsLoading(true);
+    setIsAnalyzing(true);
     setAnalysis(null);
     setErrorMessage("");
 
-    timerRef.current = window.setTimeout(() => {
-      try {
-        setAnalysis({
-          record: selectedDiagnostic,
-          result: analyzeSampleDiagnostic(selectedDiagnostic),
-        });
-      } catch {
-        setErrorMessage(
-          "The sample analysis could not be completed. Please try again.",
-        );
-      } finally {
-        setIsLoading(false);
-        timerRef.current = null;
-      }
-    }, 650);
+    try {
+      const result = await analyzeDiagnostic(selectedDiagnostic.id);
+      setAnalysis({
+        record: selectedDiagnostic,
+        result,
+        vehicle: selectedVehicle,
+      });
+    } catch (error) {
+      setErrorMessage(
+        error.message || "Diagnostic analysis is unavailable. Please retry.",
+      );
+    } finally {
+      setIsAnalyzing(false);
+    }
   }
 
-  const analysisReady = Boolean(selectedVehicle && selectedDiagnostic);
+  const analysisReady = Boolean(
+    selectedVehicle && selectedDiagnostic && !isLoading,
+  );
 
   return (
     <AppShell title="AI Diagnostic Agent" showPageHeading={false}>
@@ -129,8 +144,8 @@ export default function AIDiagnosticAgent() {
               AI Diagnostic Agent
             </h1>
             <p className="ai-agent-description">
-              Review a recorded trouble code with a simple, guided sample
-              explanation and mechanic-confirmed next steps.
+              Review a saved trouble code with a provider-independent
+              development analysis and mechanic-review guidance.
             </p>
           </div>
         </header>
@@ -140,9 +155,9 @@ export default function AIDiagnosticAgent() {
             i
           </span>
           <p>
-            <strong>Prototype — no AI model is connected.</strong> Results are
-            predefined sample responses. A DTC indicates a possible issue, not
-            a confirmed faulty component or a prediction of vehicle failure.
+            <strong>No AI provider is approved.</strong> The backend currently
+            uses a safe mock adapter. Results are not AI diagnoses, and a DTC
+            does not confirm a faulty component or predict vehicle failure.
           </p>
         </aside>
 
@@ -185,12 +200,12 @@ export default function AIDiagnosticAgent() {
                 id="agent-vehicle"
                 value={selectedVehicleId}
                 onChange={handleVehicleChange}
-                disabled={isLoading}
+                disabled={isLoading || isAnalyzing}
               >
                 <option value="">Select a vehicle</option>
-                {initialVehicleData.map((vehicle) => (
+                {vehicles.map((vehicle) => (
                   <option key={vehicle.id} value={vehicle.id}>
-                    {vehicle.name} ({vehicle.registrationNumber})
+                    {vehicle.vehicleName} ({vehicle.registrationNumber})
                   </option>
                 ))}
               </select>
@@ -208,7 +223,8 @@ export default function AIDiagnosticAgent() {
                 disabled={
                   !selectedVehicleId ||
                   availableDiagnostics.length === 0 ||
-                  isLoading
+                  isLoading ||
+                  isAnalyzing
                 }
                 aria-describedby="agent-diagnostic-help"
               >
@@ -235,13 +251,13 @@ export default function AIDiagnosticAgent() {
               className="primary-action ai-agent-analyze-button"
               type="button"
               onClick={handleAnalyze}
-              disabled={!analysisReady || isLoading}
-              aria-busy={isLoading}
+              disabled={!analysisReady || isAnalyzing}
+              aria-busy={isAnalyzing}
             >
-              {isLoading ? (
+              {isAnalyzing ? (
                 <>
                   <span className="agent-loading-spinner" aria-hidden="true" />
-                  Analyzing sample…
+                  Analyzing…
                 </>
               ) : (
                 <>
@@ -253,30 +269,46 @@ export default function AIDiagnosticAgent() {
           </div>
 
           <p className="ai-agent-form-note" id="agent-diagnostic-help-note">
-            Analysis uses sample code references only and does not change
-            diagnostic or maintenance records.
+            Analysis uses the development mock adapter and does not create
+            maintenance records or perform external actions.
           </p>
         </section>
 
+        {loadError && (
+          <p className="ai-agent-error" role="alert">
+            {loadError}{" "}
+            <button
+              className="text-action"
+              type="button"
+              onClick={() => setRefreshKey((current) => current + 1)}
+            >
+              Retry
+            </button>
+          </p>
+        )}
         {errorMessage && (
           <p className="ai-agent-error" role="alert">
             {errorMessage}
           </p>
         )}
 
-        {isLoading && (
+        {(isLoading || isAnalyzing) && (
           <div className="ai-agent-loading" role="status" aria-live="polite">
             <span className="agent-loading-spinner" aria-hidden="true" />
             <div>
-              <strong>Preparing sample analysis…</strong>
+              <strong>
+                {isLoading ? "Loading saved records…" : "Preparing analysis…"}
+              </strong>
               <span>
-                Checking the selected record against local sample knowledge.
+                {isLoading
+                  ? "Retrieving your authenticated fleet data."
+                  : "Reviewing the selected diagnostic record."}
               </span>
             </div>
           </div>
         )}
 
-        {!analysis && !isLoading && (
+        {!analysis && !isLoading && !isAnalyzing && (
           <section
             className="ai-agent-empty-state"
             aria-label="Analysis status"
@@ -301,8 +333,8 @@ export default function AIDiagnosticAgent() {
             </span>
             <h2>No analysis yet</h2>
             <p>
-              Select a vehicle and diagnostic record above, then analyze to see
-              its sample explanation and suggested next steps.
+              Select a vehicle and saved diagnostic record above, then analyze
+              to see a development response and recommended checks.
             </p>
           </section>
         )}
@@ -315,10 +347,11 @@ export default function AIDiagnosticAgent() {
           >
             <div className="ai-agent-results-header">
               <div>
-                <p className="eyebrow">SAMPLE AI ANALYSIS</p>
+                <p className="eyebrow">DEVELOPMENT MOCK RESPONSE</p>
                 <h2 id="analysis-results-title">Diagnostic review</h2>
                 <p>
-                  {analyzedVehicle.name} · {analyzedVehicle.registrationNumber}
+                  {analyzedVehicle.vehicleName} ·{" "}
+                  {analyzedVehicle.registrationNumber}
                 </p>
               </div>
               <button
@@ -348,7 +381,7 @@ export default function AIDiagnosticAgent() {
                     <div>
                       <span>Vehicle</span>
                       <strong>
-                        {analyzedVehicle.manufacturer} {analyzedVehicle.model}{" "}
+                        {analyzedVehicle.make} {analyzedVehicle.model}{" "}
                         ({analyzedVehicle.year})
                       </strong>
                     </div>
@@ -356,7 +389,8 @@ export default function AIDiagnosticAgent() {
                       <span>Record details</span>
                       <strong>
                         {formatDate(analysis.record.dateDetected)} ·{" "}
-                        {formatOdometer(analysis.record.odometerKm)} km ·{" "}
+                        {formatOdometer(analysis.record.odometer)}{" "}
+                        {analysis.record.odometerUnit} ·{" "}
                         {analysis.record.status}
                       </strong>
                     </div>
@@ -382,25 +416,25 @@ export default function AIDiagnosticAgent() {
                   )}
                   <p className="agent-section-caveat">
                     These are possibilities only, not confirmed component
-                    failures.
+                    failures. {analysis.result.uncertainty}
                   </p>
                 </AnalysisSection>
 
-                <AnalysisSection title="Suggested maintenance">
-                  {analysis.result.suggestedMaintenance.length > 0 ? (
+                <AnalysisSection title="Recommended checks">
+                  {analysis.result.recommendedChecks.length > 0 ? (
                     <ul className="agent-result-list">
-                      {analysis.result.suggestedMaintenance.map((action) => (
-                        <li key={action}>{action}</li>
+                      {analysis.result.recommendedChecks.map((check) => (
+                        <li key={check}>{check}</li>
                       ))}
                     </ul>
                   ) : (
                     <p className="agent-result-copy">
-                      No code-specific maintenance suggestions are available
-                      for this sample.
+                      No code-specific checks are available from the mock
+                      adapter.
                     </p>
                   )}
                   <p className="agent-section-caveat">
-                    Suggestions require mechanic confirmation. No maintenance
+                    A qualified mechanic must confirm checks. No maintenance
                     record has been created.
                   </p>
                 </AnalysisSection>
@@ -411,7 +445,7 @@ export default function AIDiagnosticAgent() {
                   <span
                     className={`agent-severity-badge agent-severity-${analysis.record.severity.toLowerCase()}`}
                   >
-                    {analysis.record.severity} — sample record
+                    {analysis.result.recordedSeverity} — recorded
                   </span>
                   <p className="agent-result-copy">
                     {analysis.result.severityAssessment}
@@ -420,32 +454,40 @@ export default function AIDiagnosticAgent() {
 
                 <AnalysisSection title="Recommended next steps">
                   <ol className="agent-result-list agent-ordered-list">
-                    {analysis.result.recommendedNextSteps.map((step) => (
-                      <li key={step}>{step}</li>
+                    {analysis.result.recommendedChecks.map((check) => (
+                      <li key={check}>{check}</li>
                     ))}
                   </ol>
                 </AnalysisSection>
 
                 <AnalysisSection title="Mechanic inspection">
                   <p className="agent-inspection-recommendation">
-                    {analysis.result.mechanicInspectionRecommended
+                    {analysis.result.mechanicReviewRequired
                       ? "Recommended"
                       : "Not specified"}
                   </p>
                   <p className="agent-result-copy">
-                    Have a qualified mechanic confirm findings before any
-                    repair or maintenance decision.
+                    A qualified mechanic must review the code before any
+                    diagnosis or repair decision.
+                  </p>
+                </AnalysisSection>
+                <AnalysisSection title="Human approval">
+                  <p className="agent-result-copy">
+                    {analysis.result.humanApprovalRequired
+                      ? "Required before any booking, purchase, or external action."
+                      : "No external action is available from this workflow."}
                   </p>
                 </AnalysisSection>
               </aside>
             </div>
 
             <p className="agent-results-disclaimer">
-              Sample response only; no live AI analysis was performed. A
+              Safe mock response only; no live AI model was called. A
               diagnostic trouble code indicates a possible issue and does not
               confirm a faulty component or predict failure. A qualified
-              mechanic must approve any action. FleetCare will not book services
-              or order parts from these suggestions.
+              mechanic must review findings and a human must approve any
+              external action. This workflow does not book services or order
+              parts.
             </p>
           </section>
         )}

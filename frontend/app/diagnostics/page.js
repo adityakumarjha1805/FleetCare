@@ -1,5 +1,7 @@
 import DiagnosticManagement from "../../components/diagnostic-management";
 
+export const instant = false;
+
 export const metadata = {
   title: "Diagnostics | FleetCare",
   description:

@@ -10,19 +10,25 @@ is not a proposal for endpoints that do not yet exist.
 - JSON responses normally use `{ "success": true, "data": ... }` on success
   and `{ "success": false, "error": { "code": "...", "message": "..." } }`
   on failure. The health endpoint's degraded response is an exception.
-- Protected routes accept `Authorization: Bearer <JWT>`.
+- Protected routes accept the frontend's `fleetcareAccessToken` HttpOnly cookie
+  or an explicit `Authorization: Bearer <JWT>` header for non-browser clients.
 - Authentication endpoints are rate-limited per client IP: registration allows
   10 requests per hour and login allows 10 requests per 15 minutes.
 - The JWT is signed with HS256, issued by `fleetcare-api`, intended for
   `fleetcare-client`, and expires after one hour. Protected requests also
   resolve the token subject to an existing user.
 - The backend reads `MONGODB_URI`, `FRONTEND_ORIGIN`, `JWT_SECRET`, and
-  optional `PORT` from its environment. `PORT` defaults to `5000`.
-- The frontend vehicle API uses `NEXT_PUBLIC_API_URL`, defaulting to
-  `http://localhost:5000`, and reads the token from
-  `localStorage.accessToken`.
+  optional `PORT` and `AUTH_COOKIE_SAME_SITE` from its environment. `PORT`
+  defaults to `5000`; cookie SameSite defaults to `Lax`.
+- The frontend API uses `NEXT_PUBLIC_API_URL`, defaulting to
+  `http://localhost:5000` in development. Production requires this variable
+  and an HTTPS URL.
+- In production, `FRONTEND_ORIGIN` must use HTTPS. `mongodb://` connection
+  strings must explicitly enable TLS; `mongodb+srv://` uses TLS unless
+  explicitly disabled.
 - Express accepts JSON request bodies up to 1 MB. CORS allows the configured
-  frontend origin and the `Content-Type` and `Authorization` headers.
+  frontend origin, credentials, and the `Content-Type` and `Authorization`
+  headers.
 
 ## Endpoint summary
 
@@ -30,8 +36,9 @@ is not a proposal for endpoints that do not yet exist.
 |---|---|---|---|
 | `GET` | `/api/health` | None | Reports API/database readiness |
 | `POST` | `/api/auth/register` | None | Creates a user |
-| `POST` | `/api/auth/login` | None | Verifies credentials and issues a JWT |
-| `GET` | `/api/auth/me` | Bearer JWT | Returns the authenticated user's profile |
+| `POST` | `/api/auth/login` | None | Verifies credentials and sets an HttpOnly JWT cookie |
+| `POST` | `/api/auth/logout` | Configured frontend origin | Clears the authentication cookie |
+| `GET` | `/api/auth/me` | JWT cookie or bearer token | Returns the authenticated user's profile |
 | `POST` | `/api/vehicles` | Bearer JWT | Creates a vehicle owned by the authenticated user |
 | `GET` | `/api/vehicles` | Bearer JWT | Lists the authenticated user's vehicles |
 | `GET` | `/api/vehicles/:id` | Bearer JWT | Gets one vehicle owned by the authenticated user |
@@ -52,6 +59,10 @@ is not a proposal for endpoints that do not yet exist.
 | `PUT` | `/api/service-requests/:id` | Bearer JWT | Replaces editable fields on a pending request |
 | `PATCH` | `/api/service-requests/:id` | Bearer JWT | Applies a permitted status transition |
 | `DELETE` | `/api/service-requests/:id` | Bearer JWT | Permanently deletes a pending request |
+
+For protected resource rows, the `Bearer JWT` label describes the explicit
+Authorization-header option; browser requests can instead use the
+`fleetcareAccessToken` HttpOnly cookie.
 
 No separate controller layer currently exists. Route handlers live in
 `routes/auth.js`, `routes/vehicles.js`, `routes/diagnostics.js`,
@@ -132,7 +143,6 @@ Success: `200 OK`
 {
   "success": true,
   "data": {
-    "token": "<signed JWT>",
     "user": {
       "id": "665f00000000000000000001",
       "name": "Fleet Manager",
@@ -145,9 +155,16 @@ Success: `200 OK`
 }
 ```
 
+The signed JWT is returned in the `fleetcareAccessToken` response cookie, not
+in the JSON body. The cookie is `HttpOnly`, has path `/api`, and expires after
+one hour. It uses `SameSite=Lax` by default; `AUTH_COOKIE_SAME_SITE=None`
+allows cross-site deployments only when the backend runs in production, where
+the cookie is also marked `Secure`.
+
 ### `GET /api/auth/me`
 
-Requires a valid bearer JWT. Returns the current database-backed profile:
+Requires a valid JWT cookie or bearer token. Returns the current
+database-backed profile:
 
 ```json
 {
@@ -170,12 +187,29 @@ Missing token returns `401` with code `UNAUTHORIZED` and message
 subject no longer maps to a user return `401` with code `UNAUTHORIZED` and
 message `Invalid or expired authentication token`.
 
+### `POST /api/auth/logout`
+
+Requires the exact configured `FRONTEND_ORIGIN` request origin. Success is
+`200 OK` with `{ "success": true, "data": { "loggedOut": true } }` and an
+expired `fleetcareAccessToken` cookie. This clears the browser cookie but does
+not revoke a copied JWT; it remains valid until expiry or the user is removed.
+
+The frontend `/signup` flow calls registration and then login; `/login` calls
+login directly. The browser stores the JWT only in the HttpOnly cookie and
+sends it with credentialed API requests. Protected pages call `/api/auth/me`
+before rendering; a `401` redirects to `/login`. Sign out calls the backend
+logout endpoint to clear the cookie. The cookie cannot be read by frontend
+JavaScript. Since browsers attach cookies automatically, cookie-authenticated
+state-changing requests must include the exact configured frontend `Origin`;
+missing or different origins return `403 CSRF_CHECK_FAILED`. Bearer-authenticated
+requests do not rely on cookies and are not subject to that cookie CSRF check.
+
 ## Vehicles
 
-All vehicle routes require a bearer JWT. The server derives `owner` from the
-authenticated user; callers must not send an owner ID. List, get, update, and
-delete queries are scoped to that user. An inaccessible vehicle is reported as
-not found.
+All vehicle routes require a valid JWT cookie or bearer token. The server
+derives `owner` from the authenticated user; callers must not send an owner
+ID. List, get, update, and delete queries are scoped to that user. An
+inaccessible vehicle is reported as not found.
 
 Vehicle response objects have this shape:
 
@@ -314,11 +348,11 @@ archive/soft-delete operation.
 
 ## Diagnostics
 
-All diagnostic endpoints require a bearer JWT. The owner is always derived
-from the authenticated user. A diagnostic can only be created for a vehicle
-owned by that user; inaccessible vehicles and records are reported as not
-found. Diagnostic trouble codes and severity are recorded information, not
-confirmed component failures or mechanic diagnoses.
+All diagnostic endpoints require a valid JWT cookie or bearer token. The owner
+is always derived from the authenticated user. A diagnostic can only be
+created for a vehicle owned by that user; inaccessible vehicles and records
+are reported as not found. Diagnostic trouble codes and severity are recorded
+information, not confirmed component failures or mechanic diagnoses.
 
 | Method | Path | Authentication | Current behavior |
 |---|---|---|---|
@@ -428,9 +462,9 @@ Bookings, purchases, and other external actions are not available.
 
 ## Maintenance
 
-All maintenance endpoints require a bearer JWT and are scoped to the
-authenticated user. The owner is not accepted from the request body. Each
-record references a vehicle owned by that user.
+All maintenance endpoints require a valid JWT cookie or bearer token and are
+scoped to the authenticated user. The owner is not accepted from the request
+body. Each record references a vehicle owned by that user.
 
 | Method | Path | Authentication | Current behavior |
 |---|---|---|---|
@@ -480,9 +514,9 @@ user-reported completion and is not confirmation from a service provider.
 
 ## Service requests
 
-All service-request endpoints require a bearer JWT and are scoped to the
-authenticated user. A request is not a service booking; preferred dates do
-not indicate availability or confirmation.
+All service-request endpoints require a valid JWT cookie or bearer token and
+are scoped to the authenticated user. A request is not a service booking;
+preferred dates do not indicate availability or confirmation.
 
 | Method | Path | Authentication | Current behavior |
 |---|---|---|---|
@@ -570,6 +604,7 @@ Typical error body:
 |---|---|---|
 | `400` | Invalid request/body/resource ID or status transition | `INVALID_INPUT`, `INVALID_VEHICLE`, `INVALID_DIAGNOSTIC`, `INVALID_MAINTENANCE`, `INVALID_SERVICE_REQUEST`, `INVALID_STATUS_TRANSITION`, `INVALID_DIAGNOSTIC_ID`, `INVALID_MAINTENANCE_ID`, `INVALID_SERVICE_REQUEST_ID`, `INVALID_VEHICLE_ID`, `INVALID_JSON` |
 | `401` | Missing/invalid token or invalid credentials | `UNAUTHORIZED`, `INVALID_CREDENTIALS` |
+| `403` | Cookie-authenticated write has missing/untrusted Origin, or logout origin is not configured | `CSRF_CHECK_FAILED` |
 | `404` | Unknown API route or inaccessible/missing resource | `NOT_FOUND`, `VEHICLE_NOT_FOUND` |
 | `409` | Duplicate registration or concurrent status transition | `EMAIL_ALREADY_REGISTERED`, `REGISTRATION_NUMBER_IN_USE`, `INVALID_STATUS_TRANSITION` |
 | `429` | Authentication request limit exceeded | `RATE_LIMIT_EXCEEDED` |
@@ -584,6 +619,10 @@ invalid/expired tokens.
 Malformed JSON is handled by centralized middleware as `400 INVALID_JSON`.
 Unhandled server errors are logged server-side and return a generic
 `500 INTERNAL_SERVER_ERROR`; stack traces are not sent in the response.
+The API disables Express's `X-Powered-By` header and sets
+`X-Content-Type-Options`, `X-Frame-Options`, `Referrer-Policy`, and
+`Permissions-Policy`. HTTPS termination and HSTS remain deployment
+responsibilities because no hosting/proxy environment is specified.
 
 The authentication rate limit counters are stored in process memory. Limits
 reset when the backend process restarts and are not shared across multiple
@@ -626,10 +665,11 @@ Unknown routes under `/api` return `404`:
 
 ## Current frontend API usage
 
-`frontend/lib/api-client.js` provides the shared bearer-token request helper.
-It reads `localStorage.accessToken`, removes it after a `401`, and uses
-`NEXT_PUBLIC_API_URL` (default `http://localhost:5000`). The authenticated
-frontend clients currently call:
+`frontend/lib/api-client.js` provides the shared credentialed request helper.
+It sends the HttpOnly auth cookie with API requests and uses
+`NEXT_PUBLIC_API_URL` (development default `http://localhost:5000`; required
+and HTTPS-only in production). The authenticated frontend clients currently
+call:
 
 - `GET /api/vehicles`, `GET /api/diagnostics`, and
   `GET /api/maintenance` when the dashboard loads or is retried.
@@ -648,23 +688,22 @@ frontend clients currently call:
 - `PATCH /api/service-requests/:id` when its status changes.
 - `DELETE /api/service-requests/:id` when a pending request is cancelled.
 
-Requests use the bearer token from `localStorage.accessToken`. The vehicle
-form maps its UI fields to the backend contract (`name` to `vehicleName`,
+Browser requests include credentials so the HttpOnly cookie is sent. The
+vehicle form maps its UI fields to the backend contract (`name` to `vehicleName`,
 `manufacturer` to `make`, and `odometerKm` to `odometer` with
 `odometerUnit: "km"`). Diagnostic creation uses the selected vehicle's
 odometer unit and sends a timezone-qualified timestamp. Maintenance and
 service-request flows send the authenticated vehicle ID and validated form
 fields. Clients use their resource-specific `data` properties and display API
-errors. A `401` removes the stored token and the page displays the
-authentication error; this frontend does not currently provide a login screen
-or automatic redirect.
-
-The frontend does not currently call the login/register/current-user, vehicle
-detail, update, or delete endpoints. Diagnostic capture, AI mock analysis,
-maintenance, and service requests are connected to backend APIs. Parts and
-external booking/provider integrations do not exist. Dashboard vehicle totals
-and health distribution use saved vehicles; recent diagnostic activity and
-upcoming maintenance use their persisted records.
+errors. On `401`, the route guard redirects to `/login`. The frontend calls
+registration, login, `/api/auth/me`, and `/api/auth/logout` for signup,
+sign-in, protected-route verification, and sign-out. It does not currently
+call the vehicle detail, update, or delete endpoints. Diagnostic capture, AI
+mock analysis, maintenance, and service requests are connected to backend APIs.
+Parts, telematics hardware, and external booking/provider integrations do not
+exist. Dashboard vehicle totals and health distribution use saved vehicles;
+recent diagnostic activity and upcoming maintenance use their persisted
+records.
 
 ## Inconsistencies and incomplete contracts
 
@@ -681,11 +720,11 @@ These are observations, not runtime changes:
    contracts should either document and retain this behavior deliberately or
    reserve `PUT` for replacement and use `PATCH` for partial changes.
 4. **Delete semantics:** vehicle deletion is permanent and returns the
-   deleted object with `200`; the PRD describes archiving profiles. No
-   archived state exists.
-5. **Ownership scope:** vehicles are scoped to individual users. The PRD
-   proposes organization-scoped data and organization-wide access, but there
-   is no Organization model or organization authorization yet.
+   deleted object with `200`; no archived state exists.
+5. **Ownership scope:** records are scoped to individual users. There is no
+   Organization model or organization-wide access. Any future shared-access
+   behavior requires explicit product approval and a defined data/authorization
+   model.
 6. **Validation failures:** route-level vehicle input checks return `400`.
    A Mongoose validation error that escapes those checks (for example during
    an update) has no explicit mapping in the central middleware and can become
@@ -701,17 +740,30 @@ These are observations, not runtime changes:
    `204`, including on deletion.
 9. **No pagination/query contract:** vehicle listing returns the full
    owner-scoped collection and supports no query parameters.
-10. **Authentication API not connected in frontend:** a client can call
-    auth endpoints, but the current frontend has no auth API integration
-    documented here; the vehicle client expects a token already stored as
-    `accessToken`.
+10. **Frontend resource scope:** registration, login, and current-user
+    verification are connected. The frontend does not currently call the
+    vehicle detail, update, or delete endpoints.
 11. **Error codes are not centrally specified:** codes are defined inline in
     route/middleware code. There is no shared error-code registry or formal
     OpenAPI schema.
 12. **Remaining integrations:** diagnostics, maintenance, and service
     requests are persisted. AI responses use only a bounded mock adapter
-    because no provider is approved; parts and external-service integrations
-    remain unimplemented.
+    because no provider is approved. Telematics hardware, external
+    service-provider booking, and spare-parts ordering are not implemented.
+
+## Product and development limitations
+
+- No live AI provider/model is configured. The analysis route uses a limited
+  development mock and does not persist analysis results.
+- No telematics hardware integration, external service-provider booking,
+  spare-parts ordering, or organization-wide access is implemented.
+- Service-request statuses are owner-managed workflow state; they do not
+  represent provider approval or booking confirmation.
+- A local Next.js development session previously reported that instant
+  navigation could not be validated for a protected route segment and dropped
+  it from instant-navigation validation. The observed redirect still worked;
+  the warning remains an unresolved development observation, and production
+  impact has not been established.
 
 ## Recommended convention for future modules
 
@@ -729,8 +781,10 @@ This is a recommendation only; existing runtime behavior above is unchanged.
   deletion.
 - Choose `PUT` for full replacement and `PATCH` for partial updates, or
   explicitly document a different established convention.
-- Authenticate protected routes consistently and derive user/organization
-  scope server-side; never accept ownership scope from request bodies.
+- Authenticate protected routes consistently and derive the existing
+  authenticated-user ownership scope server-side; never accept ownership
+  scope from request bodies. Add organization scope only after product
+  approval and an explicit authorization design.
 - Document validation constraints, enums, defaults, pagination, sorting,
   ownership behavior, and whether deletion is archival or permanent for each
   resource.
@@ -741,9 +795,20 @@ This is a recommendation only; existing runtime behavior above is unchanged.
 
 - Route registration: `routes/api.js`
 - Authentication handlers: `routes/auth.js`
-- Vehicle handlers: `routes/vehicles.js`
+- Resource handlers: `routes/vehicles.js`, `routes/diagnostics.js`,
+  `routes/maintenance.js`, `routes/serviceRequests.js`
 - Authentication and error middleware: `middleware/authenticate.js`,
-  `middleware/errorHandler.js`, `middleware/notFound.js`
-- Models: `models/User.js`, `models/Vehicle.js`
+  `middleware/authRateLimit.js`, `middleware/errorHandler.js`,
+  `middleware/notFound.js`
+- Models: `models/User.js`, `models/Vehicle.js`,
+  `models/DiagnosticRecord.js`, `models/MaintenanceRecord.js`,
+  `models/ServiceRequest.js`
+- Diagnostic analysis: `services/diagnosticAnalysisService.js` and
+  `services/diagnosticAnalysis/providers/mockProvider.js`
 - Express and JSON/CORS configuration: `app.js`, `config/env.js`
-- Frontend vehicle calls: `../frontend/lib/vehicles-api.js`
+- Frontend auth and API clients: `../frontend/lib/auth-api.js`,
+  `../frontend/lib/api-client.js`, and the resource clients under
+  `../frontend/lib/`
+- Frontend route protection and auth UI:
+  `../frontend/components/auth-guard.js` and
+  `../frontend/components/auth-page.js`

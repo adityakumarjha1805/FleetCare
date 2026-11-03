@@ -2,7 +2,14 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import AppShell from "./app-shell";
-import { initialVehicleData } from "./mock-fleet-data";
+import {
+  cancelServiceRequest,
+  createServiceRequest,
+  fetchServiceRequests,
+  transitionServiceRequest,
+  updateServiceRequest,
+} from "../lib/service-requests-api";
+import { fetchVehicles } from "../lib/vehicles-api";
 
 const serviceTypes = [
   "General inspection",
@@ -43,69 +50,6 @@ const requiredFields = {
   preferredDate: "Preferred service date",
 };
 
-const sampleServiceRequestData = [
-  {
-    id: "request-001",
-    requestId: "SR-2026-001",
-    vehicleId: "vehicle-003",
-    serviceType: "Engine repair",
-    description: "Investigate engine misfire and intermittent vibration.",
-    requestedDate: "2026-10-30",
-    preferredDate: "2026-11-06",
-    priority: "Critical",
-    status: "Pending",
-    notes: "Driver reported vibration under load.",
-  },
-  {
-    id: "request-002",
-    requestId: "SR-2026-002",
-    vehicleId: "vehicle-002",
-    serviceType: "Tire service",
-    description: "Inspect tire wear and complete a tire rotation.",
-    requestedDate: "2026-10-28",
-    preferredDate: "2026-11-10",
-    priority: "Medium",
-    status: "Approved",
-    notes: "Please check all tire pressures.",
-  },
-  {
-    id: "request-003",
-    requestId: "SR-2026-003",
-    vehicleId: "vehicle-001",
-    serviceType: "Oil change",
-    description: "Replace engine oil and filter.",
-    requestedDate: "2026-10-26",
-    preferredDate: "2026-11-04",
-    priority: "Low",
-    status: "In Progress",
-    notes: "",
-  },
-  {
-    id: "request-004",
-    requestId: "SR-2026-004",
-    vehicleId: "vehicle-005",
-    serviceType: "General inspection",
-    description: "Inspect warning indicator and review vehicle condition.",
-    requestedDate: "2026-10-22",
-    preferredDate: "2026-10-29",
-    priority: "High",
-    status: "Completed",
-    notes: "Sample request marked complete.",
-  },
-  {
-    id: "request-005",
-    requestId: "SR-2026-005",
-    vehicleId: "vehicle-004",
-    serviceType: "Brake inspection",
-    description: "Check brake pads and braking performance.",
-    requestedDate: "2026-10-20",
-    preferredDate: "2026-11-12",
-    priority: "High",
-    status: "Rejected",
-    notes: "Sample request declined pending more information.",
-  },
-];
-
 function getLocalDateString(date) {
   return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
 }
@@ -145,11 +89,13 @@ function ServiceRequestDialog({
   dialogRef,
   activeDialog,
   request,
+  vehicles,
   formValues,
   errors,
   formMessage,
   today,
   isCancelling,
+  isWorking,
   onChange,
   onSubmit,
   onClose,
@@ -159,7 +105,7 @@ function ServiceRequestDialog({
   onTransition,
 }) {
   const selectedVehicle = request
-    ? initialVehicleData.find((vehicle) => vehicle.id === request.vehicleId)
+    ? vehicles.find((vehicle) => vehicle.id === request.vehicleId)
     : null;
   const allowedTransitions = request
     ? allowedStatusTransitions[request.status] ?? []
@@ -209,9 +155,8 @@ function ServiceRequestDialog({
 
           {activeDialog === "add" && (
             <p className="form-data-note">
-              Sample request records and new entries are temporary frontend
-              data. Submitting a request does not book or confirm a service
-              slot.
+              Requests are stored for your account. Submitting does not book
+              or confirm a service slot.
             </p>
           )}
           {formMessage && (
@@ -238,9 +183,9 @@ function ServiceRequestDialog({
                 }
               >
                 <option value="">Select a vehicle</option>
-                {initialVehicleData.map((vehicle) => (
+                {vehicles.map((vehicle) => (
                   <option key={vehicle.id} value={vehicle.id}>
-                    {vehicle.name} ({vehicle.registrationNumber})
+                    {vehicle.vehicleName} ({vehicle.registrationNumber})
                   </option>
                 ))}
               </select>
@@ -390,16 +335,23 @@ function ServiceRequestDialog({
             <button className="secondary-button" type="button" onClick={onClose}>
               Cancel
             </button>
-            <button className="primary-action" type="submit">
+            <button
+              className="primary-action"
+              type="submit"
+              disabled={isWorking}
+            >
               {activeDialog === "edit"
-                ? "Save Changes"
-                : "Submit Service Request"}
+                ? isWorking
+                  ? "Saving..."
+                  : "Save Changes"
+                : isWorking
+                  ? "Submitting..."
+                  : "Submit Service Request"}
             </button>
           </div>
         </form>
       ) : (
-        request &&
-        selectedVehicle && (
+        request && (
           <section
             className="vehicle-details"
             aria-labelledby="service-request-details-title"
@@ -409,7 +361,9 @@ function ServiceRequestDialog({
                 <p className="eyebrow">SERVICE REQUEST</p>
                 <h2 id="service-request-details-title">{request.requestId}</h2>
                 <p className="dialog-description">
-                  {selectedVehicle.name} · {selectedVehicle.registrationNumber}
+                  {request.vehicleName || selectedVehicle?.vehicleName} ·{" "}
+                  {request.registrationNumber ||
+                    selectedVehicle?.registrationNumber}
                 </p>
               </div>
               <button
@@ -443,7 +397,10 @@ function ServiceRequestDialog({
               <div>
                 <dt>Vehicle</dt>
                 <dd>
-                  {selectedVehicle.name} ({selectedVehicle.registrationNumber})
+                  {request.vehicleName || selectedVehicle?.vehicleName} (
+                  {request.registrationNumber ||
+                    selectedVehicle?.registrationNumber}
+                  )
                 </dd>
               </div>
               <div className="vehicle-detail-full">
@@ -470,13 +427,14 @@ function ServiceRequestDialog({
               >
                 <h3 id="cancel-request-title">Cancel this pending request?</h3>
                 <p>
-                  {request.requestId} will be removed from this temporary
-                  request list. This cannot be undone.
+                  {request.requestId} will be permanently removed. This cannot
+                  be undone.
                 </p>
                 <div className="dialog-actions">
                   <button
                     className="secondary-button"
                     type="button"
+                    disabled={isWorking}
                     onClick={onKeepRequest}
                   >
                     Keep request
@@ -484,9 +442,10 @@ function ServiceRequestDialog({
                   <button
                     className="danger-action"
                     type="button"
+                    disabled={isWorking}
                     onClick={() => onCancelRequest(request.id)}
                   >
-                    Confirm cancellation
+                    {isWorking ? "Cancelling..." : "Confirm cancellation"}
                   </button>
                 </div>
               </section>
@@ -497,6 +456,7 @@ function ServiceRequestDialog({
                     <button
                       className="secondary-button service-request-cancel-button"
                       type="button"
+                      disabled={isWorking}
                       onClick={onCancelRequest}
                     >
                       Cancel request
@@ -504,6 +464,7 @@ function ServiceRequestDialog({
                     <button
                       className="secondary-button"
                       type="button"
+                      disabled={isWorking}
                       onClick={() => onEdit(request)}
                     >
                       Edit request
@@ -519,9 +480,12 @@ function ServiceRequestDialog({
                     }
                     key={status}
                     type="button"
+                    disabled={isWorking}
                     onClick={() => onTransition(request.id, status)}
                   >
-                    {status === "In Progress"
+                    {isWorking
+                      ? "Saving..."
+                      : status === "In Progress"
                       ? "Mark in progress"
                       : status === "Completed"
                         ? "Mark completed"
@@ -535,6 +499,7 @@ function ServiceRequestDialog({
                 <button
                   className="primary-action"
                   type="button"
+                  disabled={isWorking}
                   onClick={onClose}
                 >
                   Done
@@ -562,7 +527,12 @@ function ServiceRequestActions({ request, onView }) {
 }
 
 export default function ServiceRequestManagement() {
-  const [requests, setRequests] = useState(sampleServiceRequestData);
+  const [requests, setRequests] = useState([]);
+  const [vehicles, setVehicles] = useState([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [loadError, setLoadError] = useState("");
+  const [refreshKey, setRefreshKey] = useState(0);
+  const [isWorking, setIsWorking] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState("All");
   const [priorityFilter, setPriorityFilter] = useState("All");
@@ -577,12 +547,37 @@ export default function ServiceRequestManagement() {
 
   const dialogRef = useRef(null);
   const lastTriggerRef = useRef(null);
-  const nextRequestNumberRef = useRef(
-    sampleServiceRequestData.reduce((max, request) => {
-      const match = request.requestId.match(/-(\d+)$/);
-      return match ? Math.max(max, Number(match[1])) : max;
-    }, 0) + 1,
-  );
+
+  useEffect(() => {
+    const controller = new AbortController();
+
+    async function loadData() {
+      setIsLoading(true);
+      setLoadError("");
+      setNotice("");
+      try {
+        const [loadedVehicles, loadedRequests] = await Promise.all([
+          fetchVehicles({ signal: controller.signal }),
+          fetchServiceRequests({ signal: controller.signal }),
+        ]);
+        if (!controller.signal.aborted) {
+          setVehicles(loadedVehicles);
+          setRequests(loadedRequests);
+        }
+      } catch (error) {
+        if (!controller.signal.aborted) {
+          setLoadError(
+            error.message || "Unable to load service requests.",
+          );
+        }
+      } finally {
+        if (!controller.signal.aborted) setIsLoading(false);
+      }
+    }
+
+    loadData();
+    return () => controller.abort();
+  }, [refreshKey]);
 
   useEffect(() => {
     const updateToday = () => setToday(getLocalDateString(new Date()));
@@ -616,29 +611,17 @@ export default function ServiceRequestManagement() {
     if (!activeDialog) lastTriggerRef.current?.focus();
   }, [activeDialog]);
 
-  const requestsWithVehicles = useMemo(
-    () =>
-      requests.map((request) => {
-        const vehicle = initialVehicleData.find(
-          (item) => item.id === request.vehicleId,
-        );
-
-        return {
-          ...request,
-          vehicleName: vehicle?.name ?? "Unknown vehicle",
-          registrationNumber: vehicle?.registrationNumber ?? "—",
-        };
-      }),
-    [requests],
-  );
-
   const visibleRequests = useMemo(() => {
     const query = searchQuery.trim().toLocaleLowerCase();
-    return requestsWithVehicles.filter((request) => {
+    return requests.filter((request) => {
       const matchesSearch =
         !query ||
-        request.vehicleName.toLocaleLowerCase().includes(query) ||
-        request.registrationNumber.toLocaleLowerCase().includes(query) ||
+        (request.vehicleName || "Vehicle unavailable")
+          .toLocaleLowerCase()
+          .includes(query) ||
+        (request.registrationNumber || "")
+          .toLocaleLowerCase()
+          .includes(query) ||
         request.requestId.toLocaleLowerCase().includes(query);
       const matchesStatus =
         statusFilter === "All" || request.status === statusFilter;
@@ -646,7 +629,7 @@ export default function ServiceRequestManagement() {
         priorityFilter === "All" || request.priority === priorityFilter;
       return matchesSearch && matchesStatus && matchesPriority;
     });
-  }, [requestsWithVehicles, searchQuery, statusFilter, priorityFilter]);
+  }, [requests, searchQuery, statusFilter, priorityFilter]);
 
   const requestCounts = requests.reduce(
     (counts, request) => {
@@ -657,7 +640,7 @@ export default function ServiceRequestManagement() {
     },
     { pending: 0, approved: 0, completed: 0 },
   );
-  const selectedRequest = requestsWithVehicles.find(
+  const selectedRequest = requests.find(
     (request) => request.id === selectedRequestId,
   );
 
@@ -752,7 +735,7 @@ export default function ServiceRequestManagement() {
     return { nextErrors, values };
   }
 
-  function handleSubmit(event) {
+  async function handleSubmit(event) {
     event.preventDefault();
     const { nextErrors, values } = validateForm();
 
@@ -772,49 +755,54 @@ export default function ServiceRequestManagement() {
       return;
     }
 
-    const requestedDate = today ?? getLocalDateString(new Date());
-    if (activeDialog === "edit" && selectedRequestId) {
-      setRequests((current) =>
-        current.map((request) =>
-          request.id === selectedRequestId && request.status === "Pending"
-            ? {
-                ...request,
-                vehicleId: values.vehicleId,
-                serviceType: values.serviceType,
-                description: values.description,
-                priority: values.priority,
-                preferredDate: values.preferredDate,
-                notes: values.notes,
-              }
-            : request,
-        ),
-      );
-      setNotice("Pending service request updated.");
-    } else {
-      const year = requestedDate.slice(0, 4);
-      const newRequest = {
-        id: `request-${globalThis.crypto.randomUUID()}`,
-        requestId: `SR-${year}-${String(nextRequestNumberRef.current).padStart(3, "0")}`,
-        vehicleId: values.vehicleId,
-        serviceType: values.serviceType,
-        description: values.description,
-        requestedDate,
-        preferredDate: values.preferredDate,
-        priority: values.priority,
-        status: "Pending",
-        notes: values.notes,
-      };
-      nextRequestNumberRef.current += 1;
-      setRequests((current) => [newRequest, ...current]);
-      setNotice(
-        "Service request submitted as Pending. No service booking was made.",
-      );
+    const vehicle = vehicles.find((item) => item.id === values.vehicleId);
+    if (!vehicle) {
+      setFormMessage("Select a vehicle that belongs to your account.");
+      return;
     }
 
-    setSearchQuery("");
-    setStatusFilter("All");
-    setPriorityFilter("All");
-    closeDialog();
+    const payload = {
+      vehicleId: vehicle.id,
+      serviceType: values.serviceType,
+      description: values.description,
+      priority: values.priority,
+      preferredDate: values.preferredDate,
+      notes: values.notes,
+    };
+
+    setIsWorking(true);
+    setFormMessage("");
+    try {
+      if (activeDialog === "edit" && selectedRequestId) {
+        const updated = await updateServiceRequest(
+          selectedRequestId,
+          payload,
+        );
+        setRequests((current) =>
+          current.map((request) =>
+            request.id === selectedRequestId ? updated : request,
+          ),
+        );
+        setNotice("Pending service request updated.");
+      } else {
+        const created = await createServiceRequest(payload);
+        setRequests((current) => [created, ...current]);
+        setNotice(
+          "Service request saved as Pending. No service booking was made.",
+        );
+      }
+
+      setSearchQuery("");
+      setStatusFilter("All");
+      setPriorityFilter("All");
+      closeDialog();
+    } catch (error) {
+      setFormMessage(
+        error.message || "Unable to save the service request. Please retry.",
+      );
+    } finally {
+      setIsWorking(false);
+    }
   }
 
   function startCancellation() {
@@ -825,22 +813,30 @@ export default function ServiceRequestManagement() {
     setIsCancelling(false);
   }
 
-  function cancelRequest(requestId) {
+  async function cancelRequest(requestId) {
     if (typeof requestId === "string") {
-      setRequests((current) =>
-        current.filter(
-          (request) =>
-            request.id !== requestId || request.status !== "Pending",
-        ),
-      );
-      setNotice("Pending service request cancelled and removed.");
-      closeDialog();
+      setIsWorking(true);
+      setLoadError("");
+      try {
+        await cancelServiceRequest(requestId);
+        setRequests((current) =>
+          current.filter((request) => request.id !== requestId),
+        );
+        setNotice("Pending service request cancelled and removed.");
+        closeDialog();
+      } catch (error) {
+        setLoadError(
+          error.message || "Unable to cancel the service request.",
+        );
+      } finally {
+        setIsWorking(false);
+      }
     } else {
       setIsCancelling(true);
     }
   }
 
-  function transitionRequest(requestId, nextStatus) {
+  async function transitionRequest(requestId, nextStatus) {
     const request = requests.find((item) => item.id === requestId);
     if (
       !request ||
@@ -849,15 +845,21 @@ export default function ServiceRequestManagement() {
       return;
     }
 
-    setRequests((current) =>
-      current.map((request) => {
-        if (request.id !== requestId) return request;
-        const allowed = allowedStatusTransitions[request.status] ?? [];
-        if (!allowed.includes(nextStatus)) return request;
-        return { ...request, status: nextStatus };
-      }),
-    );
-    setNotice(`Request status updated to ${nextStatus}.`);
+    setIsWorking(true);
+    setLoadError("");
+    try {
+      const updated = await transitionServiceRequest(requestId, nextStatus);
+      setRequests((current) =>
+        current.map((item) => (item.id === requestId ? updated : item)),
+      );
+      setNotice(`Request status updated to ${nextStatus}.`);
+    } catch (error) {
+      setLoadError(
+        error.message || "Unable to update the service request status.",
+      );
+    } finally {
+      setIsWorking(false);
+    }
   }
 
   return (
@@ -873,20 +875,33 @@ export default function ServiceRequestManagement() {
               inspections.
             </p>
             <p className="service-request-data-note">
-              Sample request data; changes are temporary and stay in this page
-        session. A request is not a confirmed service booking.
+              Requests are stored for your account. A request is not a
+              confirmed service booking.
             </p>
           </div>
           <button
             className="primary-action"
             type="button"
             onClick={openAddDialog}
+            disabled={isLoading || vehicles.length === 0}
           >
             <span aria-hidden="true">+</span>
             Create Service Request
           </button>
         </header>
 
+        {loadError && (
+          <div className="diagnostic-request-message" role="alert">
+            <span>{loadError}</span>
+            <button
+              className="text-action"
+              type="button"
+              onClick={() => setRefreshKey((current) => current + 1)}
+            >
+              Retry
+            </button>
+          </div>
+        )}
         {notice && (
           <p className="service-request-notice" role="status" aria-live="polite">
             {notice}
@@ -899,6 +914,11 @@ export default function ServiceRequestManagement() {
             </button>
           </p>
         )}
+        {!isLoading && !loadError && vehicles.length === 0 && (
+          <p className="diagnostic-request-message" role="status">
+            Add a vehicle before creating a service request.
+          </p>
+        )}
 
         <section
           className="service-request-summary-grid"
@@ -906,22 +926,28 @@ export default function ServiceRequestManagement() {
         >
           <article className="service-request-summary-card">
             <span>Total requests</span>
-            <strong>{requests.length}</strong>
+            <strong>{isLoading || loadError ? "—" : requests.length}</strong>
             <small>Across your fleet</small>
           </article>
           <article className="service-request-summary-card service-request-summary-pending">
             <span>Pending requests</span>
-            <strong>{requestCounts.pending}</strong>
+            <strong>
+              {isLoading || loadError ? "—" : requestCounts.pending}
+            </strong>
             <small>Awaiting review</small>
           </article>
           <article className="service-request-summary-card service-request-summary-approved">
             <span>Approved requests</span>
-            <strong>{requestCounts.approved}</strong>
+            <strong>
+              {isLoading || loadError ? "—" : requestCounts.approved}
+            </strong>
             <small>Approved for next steps</small>
           </article>
           <article className="service-request-summary-card service-request-summary-completed">
             <span>Completed requests</span>
-            <strong>{requestCounts.completed}</strong>
+            <strong>
+              {isLoading || loadError ? "—" : requestCounts.completed}
+            </strong>
             <small>Marked as completed</small>
           </article>
         </section>
@@ -936,7 +962,11 @@ export default function ServiceRequestManagement() {
               <p>Review request details and update their workflow status.</p>
             </div>
             <span className="service-request-result-count" aria-live="polite">
-              Showing {visibleRequests.length} of {requests.length}
+              {isLoading
+                ? "Loading"
+                : loadError
+                  ? "Unavailable"
+                  : `Showing ${visibleRequests.length} of ${requests.length}`}
             </span>
           </div>
 
@@ -1005,7 +1035,11 @@ export default function ServiceRequestManagement() {
             </div>
           </div>
 
-          {visibleRequests.length > 0 ? (
+          {isLoading ? (
+            <div className="vehicle-empty-state" role="status">
+              Loading service requests...
+            </div>
+          ) : visibleRequests.length > 0 ? (
             <>
               <div className="service-request-table-wrap">
                 <table className="service-request-table">
@@ -1114,7 +1148,7 @@ export default function ServiceRequestManagement() {
                 ))}
               </ul>
             </>
-          ) : (
+          ) : !loadError ? (
             <div className="vehicle-empty-state" role="status">
               <span className="empty-state-icon" aria-hidden="true">
                 <svg viewBox="0 0 24 24" fill="none">
@@ -1129,22 +1163,25 @@ export default function ServiceRequestManagement() {
               </span>
               <h3>No service requests found</h3>
               <p>
-                Try a different search or filter, or clear them to view all
-                service requests.
+                {requests.length === 0
+                  ? "No service requests have been saved yet."
+                  : "Try a different search or filter, or clear them to view all service requests."}
               </p>
-              <button
-                className="text-action"
-                type="button"
-                onClick={() => {
-                  setSearchQuery("");
-                  setStatusFilter("All");
-                  setPriorityFilter("All");
-                }}
-              >
-                Clear search and filters
-              </button>
+              {requests.length > 0 && (
+                <button
+                  className="text-action"
+                  type="button"
+                  onClick={() => {
+                    setSearchQuery("");
+                    setStatusFilter("All");
+                    setPriorityFilter("All");
+                  }}
+                >
+                  Clear search and filters
+                </button>
+              )}
             </div>
-          )}
+          ) : null}
         </section>
 
         <p className="service-request-booking-footnote">
@@ -1157,11 +1194,13 @@ export default function ServiceRequestManagement() {
           dialogRef={dialogRef}
           activeDialog={activeDialog}
           request={selectedRequest}
+          vehicles={vehicles}
           formValues={formValues}
           errors={errors}
           formMessage={formMessage}
           today={today ?? ""}
           isCancelling={isCancelling}
+          isWorking={isWorking}
           onChange={handleChange}
           onSubmit={handleSubmit}
           onClose={closeDialog}

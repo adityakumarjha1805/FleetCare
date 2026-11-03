@@ -8,6 +8,11 @@ const {
   loginRateLimiter,
   registrationRateLimiter,
 } = require('../middleware/authRateLimit');
+const {
+  AUTH_COOKIE_NAME,
+  AUTH_COOKIE_OPTIONS,
+  AUTH_COOKIE_CLEAR_OPTIONS,
+} = require('../utils/authCookie');
 
 const router = express.Router();
 const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -152,16 +157,32 @@ router.post('/login', loginRateLimiter, async (req, res, next) => {
       },
     );
 
+    res.cookie(AUTH_COOKIE_NAME, token, AUTH_COOKIE_OPTIONS);
     return res.json({
       success: true,
       data: {
-        token,
         user: safeUser(user),
       },
     });
   } catch (error) {
     next(error);
   }
+});
+
+router.post('/logout', (req, res) => {
+  if (req.get('origin') !== config.frontendOrigin) {
+    return res.status(403).json({
+      success: false,
+      error: {
+        code: 'CSRF_CHECK_FAILED',
+        message: 'Request origin is not allowed',
+      },
+    });
+  }
+
+  return res
+    .clearCookie(AUTH_COOKIE_NAME, AUTH_COOKIE_CLEAR_OPTIONS)
+    .json({ success: true, data: { loggedOut: true } });
 });
 
 router.get('/me', authenticate, (req, res) => {

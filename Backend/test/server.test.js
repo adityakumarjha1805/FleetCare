@@ -115,4 +115,21 @@ test('CORS allows the configured local frontend origin', async () => {
     response.headers.get('access-control-allow-origin'),
     process.env.FRONTEND_ORIGIN,
   );
+  assert.equal(response.headers.get('access-control-allow-credentials'), 'true');
+});
+
+test('security headers are applied without disclosing Express', async () => {
+  const response = await fetch(`${baseUrl}/api/health`);
+
+  assert.equal(response.headers.get('x-powered-by'), null);
+  assert.equal(response.headers.get('x-content-type-options'), 'nosniff');
+  assert.equal(response.headers.get('x-frame-options'), 'DENY');
+  assert.equal(
+    response.headers.get('referrer-policy'),
+    'strict-origin-when-cross-origin',
+  );
+  assert.equal(
+    response.headers.get('permissions-policy'),
+    'camera=(), microphone=(), geolocation=()',
+  );
 });

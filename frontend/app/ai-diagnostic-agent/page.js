@@ -1,5 +1,7 @@
 import AIDiagnosticAgent from "../../components/ai-diagnostic-agent";
 
+export const instant = false;
+
 export const metadata = {
   title: "AI Diagnostic Agent | FleetCare",
   description:

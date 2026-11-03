@@ -1,8 +1,9 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
+import { logoutUser } from "../lib/auth-api";
 
 const navigationItems = [
   { label: "Dashboard", href: "/", icon: "dashboard" },
@@ -105,8 +106,11 @@ export default function AppShell({
   showPageHeading = true,
 }) {
   const pathname = usePathname();
+  const router = useRouter();
   const [isCollapsed, setIsCollapsed] = useState(false);
   const [isMobileNavOpen, setIsMobileNavOpen] = useState(false);
+  const [isLoggingOut, setIsLoggingOut] = useState(false);
+  const [logoutError, setLogoutError] = useState("");
   const mobileToggleRef = useRef(null);
   const desktopToggleRef = useRef(null);
   const firstNavigationLinkRef = useRef(null);
@@ -181,6 +185,20 @@ export default function AppShell({
 
   function closeMobileNav() {
     setIsMobileNavOpen(false);
+  }
+
+  async function handleLogout() {
+    if (isLoggingOut) return;
+    setIsLoggingOut(true);
+    setLogoutError("");
+    try {
+      await logoutUser();
+      router.replace("/login");
+    } catch (error) {
+      setLogoutError(error.message || "Unable to sign out. Please try again.");
+    } finally {
+      setIsLoggingOut(false);
+    }
   }
 
   return (
@@ -324,6 +342,19 @@ export default function AppShell({
           </div>
           <div className="topbar-end">
             <span className="workspace-label">Operations workspace</span>
+            {logoutError && (
+              <span className="logout-error" role="alert">
+                {logoutError}
+              </span>
+            )}
+            <button
+              className="logout-button"
+              onClick={handleLogout}
+              disabled={isLoggingOut}
+              type="button"
+            >
+              {isLoggingOut ? "Signing out…" : "Sign out"}
+            </button>
           </div>
         </header>
 

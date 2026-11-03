@@ -299,6 +299,33 @@ textarea:focus-visible,
   height: 19px;
 }
 
+.logout-button {
+  min-height: 36px;
+  padding: 0 11px;
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  background: #fff;
+  color: #536078;
+  font-size: 11px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.logout-button:hover {
+  background: #f7f8fb;
+  color: var(--foreground);
+}
+
+.logout-button:disabled {
+  cursor: wait;
+  opacity: 0.65;
+}
+
+.logout-error {
+  color: #a43842;
+  font-size: 11px;
+}
+
 .desktop-toggle,
 .mobile-toggle {
   display: grid;
@@ -306,6 +333,214 @@ textarea:focus-visible,
 
 .mobile-toggle {
   display: none;
+}
+
+.auth-route-loading {
+  display: grid;
+  min-height: 100vh;
+  place-items: center;
+  color: var(--muted);
+  font-size: 14px;
+}
+
+.auth-guard-error {
+  display: grid;
+  width: min(100% - 36px, 420px);
+  gap: 12px;
+  padding: 28px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--surface);
+  box-shadow: 0 18px 50px #17233b0d;
+}
+
+.auth-guard-error h1,
+.auth-guard-error p {
+  margin: 0;
+}
+
+.auth-guard-error h1 {
+  color: var(--foreground);
+  font-size: 20px;
+}
+
+.auth-guard-error p {
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.auth-guard-error a {
+  color: #4569d4;
+  font-size: 12px;
+  text-align: center;
+}
+
+.auth-page {
+  display: grid;
+  min-height: 100vh;
+  padding: 32px 18px;
+  place-items: center;
+  background:
+    radial-gradient(ellipse at top left, #e8eeff 0, transparent 48%),
+    var(--background);
+}
+
+.auth-card {
+  width: min(100%, 440px);
+  padding: 36px;
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  background: var(--surface);
+  box-shadow: 0 18px 50px #17233b0d;
+}
+
+.auth-brand {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  color: var(--foreground);
+  font-size: 19px;
+  font-weight: 700;
+  letter-spacing: -0.5px;
+}
+
+.auth-brand-mark {
+  display: grid;
+  width: 36px;
+  height: 36px;
+  place-items: center;
+  border-radius: 11px;
+  background: #6688f0;
+  color: #fff;
+}
+
+.auth-brand-mark svg {
+  width: 23px;
+  height: 23px;
+}
+
+.auth-heading {
+  margin: 30px 0 24px;
+}
+
+.auth-heading .eyebrow {
+  margin: 0 0 9px;
+  color: #657ba9;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 1px;
+}
+
+.auth-heading h1 {
+  margin: 0;
+  font-size: clamp(24px, 5vw, 29px);
+  letter-spacing: -0.8px;
+}
+
+.auth-heading > p:last-child {
+  margin: 9px 0 0;
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.55;
+}
+
+.auth-form {
+  display: flex;
+  flex-direction: column;
+  gap: 17px;
+}
+
+.auth-field {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+}
+
+.auth-field label {
+  color: #354158;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.auth-field input {
+  width: 100%;
+  min-height: 44px;
+  padding: 0 12px;
+  border: 1px solid #dfe4ed;
+  border-radius: 8px;
+  background: #fff;
+  color: var(--foreground);
+  font: inherit;
+  font-size: 13px;
+}
+
+.auth-field input:focus {
+  border-color: var(--accent);
+  outline: 3px solid #8eabff40;
+}
+
+.auth-field-hint {
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.auth-submit {
+  min-height: 45px;
+  margin-top: 3px;
+  border: 1px solid #4569d4;
+  border-radius: 8px;
+  background: var(--accent);
+  color: #fff;
+  font-size: 13px;
+  font-weight: 650;
+  cursor: pointer;
+}
+
+.auth-submit:hover:not(:disabled) {
+  background: #4569d4;
+}
+
+.auth-submit:disabled {
+  cursor: wait;
+  opacity: 0.7;
+}
+
+.auth-message {
+  margin: 0 0 17px;
+  padding: 11px 12px;
+  border: 1px solid;
+  border-radius: 8px;
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.auth-error {
+  border-color: #f0c9cd;
+  background: #fff5f5;
+  color: #a63f49;
+}
+
+.auth-success {
+  border-color: #bde4d8;
+  background: #effaf6;
+  color: #24755f;
+}
+
+.auth-switch {
+  margin: 22px 0 0;
+  color: var(--muted);
+  font-size: 12px;
+  text-align: center;
+}
+
+.auth-switch a {
+  color: #4569d4;
+  font-weight: 650;
+}
+
+.auth-switch a:hover {
+  text-decoration: underline;
+  text-underline-offset: 3px;
 }
 
 .main-content {
@@ -420,6 +655,45 @@ textarea:focus-visible,
   margin: 6px 0 0;
   color: var(--muted);
   font-size: 11px;
+}
+
+.dashboard-feedback {
+  margin: 0;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.dashboard-load-error {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  padding: 11px 13px;
+  border: 1px solid #f2d4d7;
+  border-radius: 8px;
+  background: #fff7f7;
+  color: #a63f49;
+  font-size: 12px;
+}
+
+.dashboard-load-error p {
+  margin: 0;
+}
+
+.dashboard-load-error .text-action {
+  border: 0;
+  background: transparent;
+  cursor: pointer;
+  font: inherit;
+}
+
+.dashboard-empty-state {
+  margin: 0;
+  padding: 16px 0;
+  border-top: 1px solid #eff1f5;
+  color: var(--muted);
+  font-size: 11px;
+  line-height: 1.5;
 }
 
 .primary-action {
@@ -1441,6 +1715,10 @@ textarea:focus-visible,
     gap: 10px;
   }
 
+  .workspace-label {
+    display: none;
+  }
+
   .main-content {
     padding: 32px 22px;
   }
@@ -1528,6 +1806,10 @@ textarea:focus-visible,
 }
 
 @media (max-width: 560px) {
+  .auth-card {
+    padding: 28px 22px;
+  }
+
   .dashboard-intro {
     align-items: flex-start;
     flex-direction: column;
@@ -1712,6 +1994,47 @@ textarea:focus-visible,
   color: var(--muted);
   font-size: 11px;
   line-height: 1.55;
+}
+
+.diagnostic-request-message,
+.diagnostic-success-message {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin: 0;
+  padding: 11px 14px;
+  border: 1px solid #f2d4d7;
+  border-radius: 8px;
+  background: #fff8f8;
+  color: #a53d47;
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.diagnostic-success-message {
+  border-color: #cfe6dc;
+  background: #f5fbf8;
+  color: #28714e;
+}
+
+.diagnostic-request-message .text-action {
+  flex: 0 0 auto;
+  border: 0;
+  background: none;
+  color: inherit;
+  cursor: pointer;
+  font: inherit;
+  font-weight: 650;
+  text-decoration: underline;
+}
+
+.diagnostic-page-header .primary-action:disabled,
+.diagnostic-dialog .primary-action:disabled,
+.diagnostic-record-actions button:disabled,
+.resolve-button:disabled {
+  cursor: not-allowed;
+  opacity: 0.6;
 }
 
 .diagnostic-summary-grid {

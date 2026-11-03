@@ -1,70 +1,30 @@
-const apiBaseUrl = (
-  process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000"
-).replace(/\/+$/, "");
+import { ApiError, apiRequest } from "./api-client";
 
-export class VehicleApiError extends Error {
+export class VehicleApiError extends ApiError {
   constructor(message, status, code) {
-    super(message);
+    super(message, status, code);
     this.name = "VehicleApiError";
-    this.status = status;
-    this.code = code;
   }
-}
-
-function getAccessToken() {
-  if (typeof window === "undefined") {
-    throw new VehicleApiError("Authentication is required.", 401, "UNAUTHORIZED");
-  }
-
-  const token = window.localStorage.getItem("accessToken");
-  if (!token) {
-    throw new VehicleApiError(
-      "Your session is missing or expired. Sign in again to manage vehicles.",
-      401,
-      "UNAUTHORIZED",
-    );
-  }
-
-  return token;
 }
 
 async function requestVehicles(path, { method = "GET", body, signal } = {}) {
-  const token = getAccessToken();
-  const response = await fetch(`${apiBaseUrl}/api/vehicles${path}`, {
-    method,
-    headers: {
-      Accept: "application/json",
-      Authorization: `Bearer ${token}`,
-      ...(body === undefined ? {} : { "Content-Type": "application/json" }),
-    },
-    ...(body === undefined ? {} : { body: JSON.stringify(body) }),
-    ...(signal ? { signal } : {}),
-  });
-
-  let payload;
   try {
-    payload = await response.json();
-  } catch {
-    throw new VehicleApiError(
-      "The server returned an invalid response. Please try again.",
-      response.status,
-      "INVALID_RESPONSE",
-    );
+    return await apiRequest(`/vehicles${path}`, { method, body, signal });
+  } catch (error) {
+    if (error instanceof ApiError) {
+      throw new VehicleApiError(
+        error.message.includes("Sign in again")
+          ? error.message.replace(
+              "to continue",
+              "to manage vehicles",
+            )
+          : error.message,
+        error.status,
+        error.code,
+      );
+    }
+    throw error;
   }
-
-  if (response.status === 401) {
-    window.localStorage.removeItem("accessToken");
-  }
-
-  if (!response.ok || payload?.success !== true) {
-    throw new VehicleApiError(
-      payload?.error?.message || "Unable to complete the vehicle request.",
-      response.status,
-      payload?.error?.code || "REQUEST_FAILED",
-    );
-  }
-
-  return payload.data;
 }
 
 export async function fetchVehicles({ signal } = {}) {

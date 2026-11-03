@@ -31,6 +31,29 @@ if (
   throw new Error('FRONTEND_ORIGIN must be a valid HTTP or HTTPS origin');
 }
 
+const isProduction = process.env.NODE_ENV === 'production';
+if (isProduction && parsedFrontendOrigin.protocol !== 'https:') {
+  throw new Error('FRONTEND_ORIGIN must use HTTPS in production');
+}
+
+if (isProduction && /^mongodb:\/\//i.test(mongodbUri)) {
+  const hasTlsOption = /(?:[?&])(?:tls|ssl)=true(?:&|$)/i.test(mongodbUri);
+  if (!hasTlsOption) {
+    throw new Error('MONGODB_URI must enable TLS in production');
+  }
+}
+if (isProduction && /(?:[?&])(?:tls|ssl)=false(?:&|$)/i.test(mongodbUri)) {
+  throw new Error('MONGODB_URI cannot disable TLS in production');
+}
+
+const authCookieSameSite = (process.env.AUTH_COOKIE_SAME_SITE || 'lax').toLowerCase();
+if (!['lax', 'none'].includes(authCookieSameSite)) {
+  throw new Error('AUTH_COOKIE_SAME_SITE must be Lax or None');
+}
+if (authCookieSameSite === 'none' && !isProduction) {
+  throw new Error('AUTH_COOKIE_SAME_SITE=None requires production HTTPS');
+}
+
 const jwtSecret = required('JWT_SECRET');
 if (Buffer.byteLength(jwtSecret, 'utf8') < 32) {
   throw new Error('JWT_SECRET must be at least 32 bytes long');
@@ -45,5 +68,8 @@ module.exports = Object.freeze({
   port,
   mongodbUri,
   frontendOrigin: parsedFrontendOrigin.origin,
+  isProduction,
+  authCookieSameSite,
+  authCookieSecure: isProduction,
   jwtSecret,
 });

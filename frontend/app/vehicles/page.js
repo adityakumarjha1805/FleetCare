@@ -5,6 +5,8 @@ export const metadata = {
   description: "Search, manage, and register vehicles in your FleetCare fleet.",
 };
 
+export const instant = false;
+
 export default function VehiclesPage() {
   return <VehicleManagement />;
 }

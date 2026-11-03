@@ -1,5 +1,7 @@
 import MaintenanceManagement from "../../components/maintenance-management";
 
+export const instant = false;
+
 export const metadata = {
   title: "Maintenance | FleetCare",
   description:

@@ -2,7 +2,12 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import AppShell from "./app-shell";
-import { initialVehicleData } from "./mock-fleet-data";
+import {
+  completeMaintenance,
+  createMaintenance,
+  fetchMaintenance,
+} from "../lib/maintenance-api";
+import { fetchVehicles } from "../lib/vehicles-api";
 
 const maintenanceTypes = [
   "Oil change",
@@ -12,62 +17,14 @@ const maintenanceTypes = [
   "Other",
 ];
 const maintenanceStatuses = ["Upcoming", "Overdue", "Completed"];
-const maximumOdometerKm = 2_000_000;
-
-const sampleMaintenanceData = [
-  {
-    id: "maintenance-001",
-    vehicleId: "vehicle-001",
-    type: "Oil change",
-    description: "Scheduled engine oil and filter replacement.",
-    maintenanceDate: "2026-11-12",
-    odometerKm: 48210,
-    status: "Upcoming",
-  },
-  {
-    id: "maintenance-002",
-    vehicleId: "vehicle-002",
-    type: "Tire rotation",
-    description: "Rotate tires and check tread wear.",
-    maintenanceDate: "2026-10-20",
-    odometerKm: 76240,
-    status: "Overdue",
-  },
-  {
-    id: "maintenance-003",
-    vehicleId: "vehicle-003",
-    type: "Brake inspection",
-    description: "Inspect pads, rotors, and brake fluid.",
-    maintenanceDate: "2026-10-24",
-    odometerKm: 184520,
-    status: "Completed",
-  },
-  {
-    id: "maintenance-004",
-    vehicleId: "vehicle-004",
-    type: "General servicing",
-    description: "Routine service and multi-point vehicle check.",
-    maintenanceDate: "2026-11-02",
-    odometerKm: 21680,
-    status: "Upcoming",
-  },
-  {
-    id: "maintenance-005",
-    vehicleId: "vehicle-005",
-    type: "Oil change",
-    description: "Replace engine oil and inspect fluid levels.",
-    maintenanceDate: "2026-10-18",
-    odometerKm: 236840,
-    status: "Completed",
-  },
-];
+const maximumOdometer = 2_000_000;
 
 const emptyMaintenanceForm = {
   vehicleId: "",
   type: "",
   description: "",
   maintenanceDate: "",
-  odometerKm: "",
+  odometer: "",
   status: "",
 };
 
@@ -76,7 +33,7 @@ const requiredFields = {
   type: "Maintenance type",
   description: "Description",
   maintenanceDate: "Maintenance date",
-  odometerKm: "Odometer reading",
+  odometer: "Odometer reading",
   status: "Status",
 };
 
@@ -121,19 +78,20 @@ function MaintenanceDialog({
   dialogRef,
   activeDialog,
   selectedRecord,
+  vehicles,
   formValues,
   errors,
   formMessage,
   today,
+  isSaving,
+  isCompleting,
   onChange,
   onSubmit,
   onClose,
   onComplete,
 }) {
   const selectedVehicle = selectedRecord
-    ? initialVehicleData.find(
-        (vehicle) => vehicle.id === selectedRecord.vehicleId,
-      )
+    ? vehicles.find((vehicle) => vehicle.id === selectedRecord.vehicleId)
     : null;
 
   return (
@@ -171,8 +129,8 @@ function MaintenanceDialog({
           </div>
 
           <p className="form-data-note">
-            Sample maintenance records and new entries are temporary frontend
-            data for this page session.
+            Records are stored for your account. A completed entry records work
+            reported as done; it is not a service booking.
           </p>
           {formMessage && (
             <p className="form-error-summary" role="alert">
@@ -198,9 +156,9 @@ function MaintenanceDialog({
                 }
               >
                 <option value="">Select a vehicle</option>
-                {initialVehicleData.map((vehicle) => (
+                {vehicles.map((vehicle) => (
                   <option key={vehicle.id} value={vehicle.id}>
-                    {vehicle.name} ({vehicle.registrationNumber})
+                    {vehicle.vehicleName} ({vehicle.registrationNumber})
                   </option>
                 ))}
               </select>
@@ -267,27 +225,31 @@ function MaintenanceDialog({
 
             <div className="form-field">
               <label htmlFor="maintenance-odometer">
-                Odometer reading (km) <span aria-hidden="true">*</span>
+                Odometer reading
+                {formValues.vehicleId
+                  ? ` (${vehicles.find((vehicle) => vehicle.id === formValues.vehicleId)?.odometerUnit ?? "km"})`
+                  : ""}
+                <span aria-hidden="true"> *</span>
               </label>
               <input
                 id="maintenance-odometer"
-                name="odometerKm"
+                name="odometer"
                 type="number"
                 inputMode="numeric"
                 min="0"
-                max={maximumOdometerKm}
+                max={maximumOdometer}
                 step="1"
                 required
-                value={formValues.odometerKm}
+                value={formValues.odometer}
                 onChange={onChange}
-                aria-invalid={Boolean(errors.odometerKm)}
+                aria-invalid={Boolean(errors.odometer)}
                 aria-describedby={
-                  errors.odometerKm ? "maintenance-odometer-error" : undefined
+                  errors.odometer ? "maintenance-odometer-error" : undefined
                 }
               />
-              {errors.odometerKm && (
+              {errors.odometer && (
                 <span className="field-error" id="maintenance-odometer-error">
-                  {errors.odometerKm}
+                  {errors.odometer}
                 </span>
               )}
             </div>
@@ -360,14 +322,17 @@ function MaintenanceDialog({
             <button className="secondary-button" type="button" onClick={onClose}>
               Cancel
             </button>
-            <button className="primary-action" type="submit">
-              Add Maintenance Record
+            <button
+              className="primary-action"
+              type="submit"
+              disabled={isSaving}
+            >
+              {isSaving ? "Saving..." : "Add Maintenance Record"}
             </button>
           </div>
         </form>
       ) : (
-        selectedRecord &&
-        selectedVehicle && (
+        selectedRecord && (
           <section
             className="vehicle-details"
             aria-labelledby="maintenance-details-title"
@@ -377,7 +342,9 @@ function MaintenanceDialog({
                 <p className="eyebrow">MAINTENANCE RECORD</p>
                 <h2 id="maintenance-details-title">{selectedRecord.type}</h2>
                 <p className="dialog-description">
-                  {selectedVehicle.name} · {selectedVehicle.registrationNumber}
+                  {selectedRecord.vehicleName || selectedVehicle?.vehicleName} ·{" "}
+                  {selectedRecord.registrationNumber ||
+                    selectedVehicle?.registrationNumber}
                 </p>
               </div>
               <button
@@ -405,16 +372,27 @@ function MaintenanceDialog({
                     ? "Completed date"
                     : "Scheduled date"}
                 </dt>
-                <dd>{formatDate(selectedRecord.maintenanceDate)}</dd>
+                <dd>
+                  {formatDate(
+                    selectedRecord.completedAt ||
+                      selectedRecord.maintenanceDate,
+                  )}
+                </dd>
               </div>
               <div>
                 <dt>Odometer</dt>
-                <dd>{formatOdometer(selectedRecord.odometerKm)} km</dd>
+                <dd>
+                  {formatOdometer(selectedRecord.odometer)}{" "}
+                  {selectedRecord.odometerUnit}
+                </dd>
               </div>
               <div>
                 <dt>Vehicle</dt>
                 <dd>
-                  {selectedVehicle.name} ({selectedVehicle.registrationNumber})
+                  {selectedRecord.vehicleName || selectedVehicle?.vehicleName} (
+                  {selectedRecord.registrationNumber ||
+                    selectedVehicle?.registrationNumber}
+                  )
                 </dd>
               </div>
             </dl>
@@ -424,9 +402,10 @@ function MaintenanceDialog({
                 <button
                   className="secondary-button resolve-button"
                   type="button"
+                  disabled={isCompleting}
                   onClick={() => onComplete(selectedRecord.id)}
                 >
-                  Mark as completed
+                  {isCompleting ? "Saving..." : "Mark as completed"}
                 </button>
               )}
               <button
@@ -444,7 +423,7 @@ function MaintenanceDialog({
   );
 }
 
-function MaintenanceActions({ record, onView, onComplete }) {
+function MaintenanceActions({ record, onView, onComplete, isCompleting }) {
   return (
     <div className="maintenance-record-actions">
       <button
@@ -459,10 +438,11 @@ function MaintenanceActions({ record, onView, onComplete }) {
         <button
           className="maintenance-complete-link"
           type="button"
+          disabled={isCompleting}
           onClick={() => onComplete(record.id)}
           aria-label={`Mark ${record.type} for ${record.vehicleName} as completed`}
         >
-          Mark completed
+          {isCompleting ? "Saving..." : "Mark completed"}
         </button>
       )}
     </div>
@@ -470,7 +450,14 @@ function MaintenanceActions({ record, onView, onComplete }) {
 }
 
 export default function MaintenanceManagement() {
-  const [records, setRecords] = useState(sampleMaintenanceData);
+  const [records, setRecords] = useState([]);
+  const [vehicles, setVehicles] = useState([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [loadError, setLoadError] = useState("");
+  const [notice, setNotice] = useState("");
+  const [refreshKey, setRefreshKey] = useState(0);
+  const [isSaving, setIsSaving] = useState(false);
+  const [completingRecordId, setCompletingRecordId] = useState(null);
   const [searchQuery, setSearchQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState("All");
   const [typeFilter, setTypeFilter] = useState("All");
@@ -483,6 +470,37 @@ export default function MaintenanceManagement() {
 
   const dialogRef = useRef(null);
   const lastTriggerRef = useRef(null);
+
+  useEffect(() => {
+    const controller = new AbortController();
+
+    async function loadData() {
+      setIsLoading(true);
+      setLoadError("");
+      setNotice("");
+      try {
+        const [loadedVehicles, loadedRecords] = await Promise.all([
+          fetchVehicles({ signal: controller.signal }),
+          fetchMaintenance({ signal: controller.signal }),
+        ]);
+        if (!controller.signal.aborted) {
+          setVehicles(loadedVehicles);
+          setRecords(loadedRecords);
+        }
+      } catch (error) {
+        if (!controller.signal.aborted) {
+          setLoadError(
+            error.message || "Unable to load maintenance records.",
+          );
+        }
+      } finally {
+        if (!controller.signal.aborted) setIsLoading(false);
+      }
+    }
+
+    loadData();
+    return () => controller.abort();
+  }, [refreshKey]);
 
   useEffect(() => {
     const updateToday = () => setToday(getLocalDateString(new Date()));
@@ -517,14 +535,10 @@ export default function MaintenanceManagement() {
   const recordsWithVehicles = useMemo(
     () =>
       records.map((record) => {
-        const vehicle = initialVehicleData.find(
-          (item) => item.id === record.vehicleId,
-        );
-
         return {
           ...record,
-          vehicleName: vehicle?.name ?? "Unknown vehicle",
-          registrationNumber: vehicle?.registrationNumber ?? "—",
+          vehicleName: record.vehicleName || "Vehicle unavailable",
+          registrationNumber: record.registrationNumber || "—",
           currentStatus: getCurrentStatus(record, today),
         };
       }),
@@ -610,14 +624,14 @@ export default function MaintenanceManagement() {
       nextErrors.type = "Select a maintenance type from the list.";
     }
 
-    if (values.odometerKm) {
-      const odometerKm = Number(values.odometerKm);
+    if (values.odometer) {
+      const odometer = Number(values.odometer);
       if (
-        !Number.isInteger(odometerKm) ||
-        odometerKm < 0 ||
-        odometerKm > maximumOdometerKm
+        !Number.isInteger(odometer) ||
+        odometer < 0 ||
+        odometer > maximumOdometer
       ) {
-        nextErrors.odometerKm = `Enter a whole number from 0 to ${formatOdometer(maximumOdometerKm)} km.`;
+        nextErrors.odometer = `Enter a whole number from 0 to ${formatOdometer(maximumOdometer)}.`;
       }
     }
 
@@ -655,7 +669,7 @@ export default function MaintenanceManagement() {
     return { nextErrors, values };
   }
 
-  function handleSubmit(event) {
+  async function handleSubmit(event) {
     event.preventDefault();
     const { nextErrors, values } = validateForm();
 
@@ -666,7 +680,7 @@ export default function MaintenanceManagement() {
         type: "maintenance-type",
         description: "maintenance-description",
         maintenanceDate: "maintenance-date",
-        odometerKm: "maintenance-odometer",
+        odometer: "maintenance-odometer",
         status: "maintenance-status",
       };
       const firstInvalidField = Object.keys(requiredFields).find(
@@ -676,45 +690,62 @@ export default function MaintenanceManagement() {
       return;
     }
 
-    const newRecord = {
-      id: `maintenance-${globalThis.crypto.randomUUID()}`,
-      vehicleId: values.vehicleId,
-      type: values.type,
-      description: values.description,
-      maintenanceDate: values.maintenanceDate,
-      odometerKm: Number(values.odometerKm),
-      status: values.status,
-    };
+    const vehicle = vehicles.find((item) => item.id === values.vehicleId);
+    if (!vehicle) {
+      setFormMessage("Select a vehicle that belongs to your account.");
+      return;
+    }
 
-    setRecords((current) => [newRecord, ...current]);
-    setSearchQuery("");
-    setStatusFilter("All");
-    setTypeFilter("All");
-    closeDialog();
+    setIsSaving(true);
+    setFormMessage("");
+    try {
+      const createdRecord = await createMaintenance({
+        vehicleId: vehicle.id,
+        type: values.type,
+        description: values.description,
+        maintenanceDate: values.maintenanceDate,
+        odometer: Number(values.odometer),
+        odometerUnit: vehicle.odometerUnit,
+        status: values.status,
+      });
+      setRecords((current) => [createdRecord, ...current]);
+      setSearchQuery("");
+      setStatusFilter("All");
+      setTypeFilter("All");
+      setNotice("Maintenance record saved.");
+      closeDialog();
+    } catch (error) {
+      setFormMessage(
+        error.message || "Unable to save the maintenance record. Please retry.",
+      );
+    } finally {
+      setIsSaving(false);
+    }
   }
 
-  function markCompleted(recordId) {
-    const completionDate = today ?? getLocalDateString(new Date());
-    setRecords((current) =>
-      current.map((record) =>
-        record.id === recordId
-          ? {
-              ...record,
-              status: "Completed",
-              maintenanceDate: completionDate,
-            }
-          : record,
-      ),
-    );
-    setSelectedRecord((current) =>
-      current?.id === recordId
-        ? {
-            ...current,
-            status: "Completed",
-            maintenanceDate: completionDate,
-          }
-        : current,
-    );
+  async function markCompleted(recordId) {
+    if (completingRecordId) return;
+    setCompletingRecordId(recordId);
+    setLoadError("");
+    setNotice("");
+    try {
+      const updatedRecord = await completeMaintenance(recordId);
+      setRecords((current) =>
+        current.map((record) =>
+          record.id === recordId ? updatedRecord : record,
+        ),
+      );
+      setSelectedRecord((current) =>
+        current?.id === recordId ? updatedRecord : current,
+      );
+      setNotice("Maintenance record marked as completed.");
+    } catch (error) {
+      setLoadError(
+        error.message || "Unable to update the maintenance record.",
+      );
+    } finally {
+      setCompletingRecordId(null);
+    }
   }
 
   return (
@@ -728,19 +759,43 @@ export default function MaintenanceManagement() {
               maintenance records organized.
             </p>
             <p className="maintenance-data-note">
-              Sample maintenance records; updates are temporary frontend data
-              for this page session.
+              Records are saved to your account. Odometer units follow the
+              selected vehicle.
             </p>
           </div>
           <button
             className="primary-action"
             type="button"
             onClick={openAddDialog}
+            disabled={isLoading || vehicles.length === 0}
           >
             <span aria-hidden="true">+</span>
             Add Maintenance Record
           </button>
         </header>
+
+        {loadError && (
+          <div className="diagnostic-request-message" role="alert">
+            <span>{loadError}</span>
+            <button
+              className="text-action"
+              type="button"
+              onClick={() => setRefreshKey((current) => current + 1)}
+            >
+              Retry
+            </button>
+          </div>
+        )}
+        {notice && (
+          <p className="diagnostic-success-message" role="status">
+            {notice}
+          </p>
+        )}
+        {!isLoading && !loadError && vehicles.length === 0 && (
+          <p className="diagnostic-request-message" role="status">
+            Add a vehicle before recording maintenance.
+          </p>
+        )}
 
         <section
           className="maintenance-summary-grid"
@@ -750,7 +805,7 @@ export default function MaintenanceManagement() {
             <span className="maintenance-summary-label">
               Total maintenance records
             </span>
-            <strong>{records.length}</strong>
+            <strong>{isLoading || loadError ? "—" : records.length}</strong>
             <span className="maintenance-summary-detail">
               Across your fleet
             </span>
@@ -759,7 +814,9 @@ export default function MaintenanceManagement() {
             <span className="maintenance-summary-label">
               Upcoming maintenance
             </span>
-            <strong>{statusCounts.Upcoming}</strong>
+            <strong>
+              {isLoading || loadError ? "—" : statusCounts.Upcoming}
+            </strong>
             <span className="maintenance-summary-detail">
               Scheduled for today or later
             </span>
@@ -768,7 +825,7 @@ export default function MaintenanceManagement() {
             <span className="maintenance-summary-label">
               Overdue maintenance
             </span>
-            <strong>{statusCounts.Overdue}</strong>
+            <strong>{isLoading || loadError ? "—" : statusCounts.Overdue}</strong>
             <span className="maintenance-summary-detail">
               Past scheduled date
             </span>
@@ -777,7 +834,9 @@ export default function MaintenanceManagement() {
             <span className="maintenance-summary-label">
               Completed maintenance
             </span>
-            <strong>{statusCounts.Completed}</strong>
+            <strong>
+              {isLoading || loadError ? "—" : statusCounts.Completed}
+            </strong>
             <span className="maintenance-summary-detail">
               Work marked complete
             </span>
@@ -794,7 +853,11 @@ export default function MaintenanceManagement() {
               <p>Search and filter your fleet maintenance activity.</p>
             </div>
             <span className="maintenance-result-count" aria-live="polite">
-              Showing {visibleRecords.length} of {records.length}
+              {isLoading
+                ? "Loading"
+                : loadError
+                  ? "Unavailable"
+                  : `Showing ${visibleRecords.length} of ${records.length}`}
             </span>
           </div>
 
@@ -863,7 +926,11 @@ export default function MaintenanceManagement() {
             </div>
           </div>
 
-          {visibleRecords.length > 0 ? (
+          {isLoading ? (
+            <div className="vehicle-empty-state" role="status">
+              Loading maintenance records...
+            </div>
+          ) : visibleRecords.length > 0 ? (
             <>
               <div className="maintenance-table-wrap">
                 <table className="maintenance-table">
@@ -897,11 +964,20 @@ export default function MaintenanceManagement() {
                           {record.description}
                         </td>
                         <td>
-                          <time dateTime={record.maintenanceDate}>
-                            {formatDate(record.maintenanceDate)}
+                          <time
+                            dateTime={
+                              record.completedAt || record.maintenanceDate
+                            }
+                          >
+                            {formatDate(
+                              record.completedAt || record.maintenanceDate,
+                            )}
                           </time>
                         </td>
-                        <td>{formatOdometer(record.odometerKm)} km</td>
+                        <td>
+                          {formatOdometer(record.odometer)}{" "}
+                          {record.odometerUnit}
+                        </td>
                         <td>
                           <MaintenanceStatusBadge
                             status={record.currentStatus}
@@ -912,6 +988,7 @@ export default function MaintenanceManagement() {
                             record={record}
                             onView={openDetails}
                             onComplete={markCompleted}
+                            isCompleting={completingRecordId === record.id}
                           />
                         </td>
                       </tr>
@@ -945,25 +1022,36 @@ export default function MaintenanceManagement() {
                         {record.description}
                       </p>
                       <div className="maintenance-mobile-meta">
-                        <time dateTime={record.maintenanceDate}>
+                        <time
+                          dateTime={
+                            record.completedAt || record.maintenanceDate
+                          }
+                        >
                           {record.currentStatus === "Completed"
                             ? "Completed"
                             : "Scheduled"}
-                          : {formatDate(record.maintenanceDate)}
+                          :{" "}
+                          {formatDate(
+                            record.completedAt || record.maintenanceDate,
+                          )}
                         </time>
-                        <span>{formatOdometer(record.odometerKm)} km</span>
+                        <span>
+                          {formatOdometer(record.odometer)}{" "}
+                          {record.odometerUnit}
+                        </span>
                       </div>
                       <MaintenanceActions
                         record={record}
                         onView={openDetails}
                         onComplete={markCompleted}
+                        isCompleting={completingRecordId === record.id}
                       />
                     </article>
                   </li>
                 ))}
               </ul>
             </>
-          ) : (
+          ) : !loadError ? (
             <div className="vehicle-empty-state" role="status">
               <span className="empty-state-icon" aria-hidden="true">
                 <svg viewBox="0 0 24 24" fill="none">
@@ -978,32 +1066,38 @@ export default function MaintenanceManagement() {
               </span>
               <h3>No maintenance records found</h3>
               <p>
-                Try another search or filter, or clear them to see all
-                maintenance records.
+                {records.length === 0
+                  ? "No maintenance records have been saved yet."
+                  : "Try another search or filter, or clear them to see all maintenance records."}
               </p>
-              <button
-                className="text-action"
-                type="button"
-                onClick={() => {
-                  setSearchQuery("");
-                  setStatusFilter("All");
-                  setTypeFilter("All");
-                }}
-              >
-                Clear search and filters
-              </button>
+              {records.length > 0 && (
+                <button
+                  className="text-action"
+                  type="button"
+                  onClick={() => {
+                    setSearchQuery("");
+                    setStatusFilter("All");
+                    setTypeFilter("All");
+                  }}
+                >
+                  Clear search and filters
+                </button>
+              )}
             </div>
-          )}
+          ) : null}
         </section>
 
         <MaintenanceDialog
           dialogRef={dialogRef}
           activeDialog={activeDialog}
           selectedRecord={selectedRecord}
+          vehicles={vehicles}
           formValues={formValues}
           errors={errors}
           formMessage={formMessage}
           today={today}
+          isSaving={isSaving}
+          isCompleting={completingRecordId === selectedRecord?.id}
           onChange={handleChange}
           onSubmit={handleSubmit}
           onClose={closeDialog}

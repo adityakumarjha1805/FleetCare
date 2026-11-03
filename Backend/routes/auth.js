@@ -4,6 +4,10 @@ const jwt = require('jsonwebtoken');
 const config = require('../config/env');
 const User = require('../models/User');
 const authenticate = require('../middleware/authenticate');
+const {
+  loginRateLimiter,
+  registrationRateLimiter,
+} = require('../middleware/authRateLimit');
 
 const router = express.Router();
 const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -59,7 +63,7 @@ function validPassword(password) {
   );
 }
 
-router.post('/register', async (req, res, next) => {
+router.post('/register', registrationRateLimiter, async (req, res, next) => {
   if (!isRecord(req.body)) {
     return invalidInput(res, 'A JSON object with name, email, and password is required');
   }
@@ -110,7 +114,7 @@ router.post('/register', async (req, res, next) => {
   }
 });
 
-router.post('/login', async (req, res, next) => {
+router.post('/login', loginRateLimiter, async (req, res, next) => {
   if (
     !isRecord(req.body) ||
     typeof req.body.email !== 'string' ||

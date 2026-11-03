@@ -11,6 +11,8 @@ is not a proposal for endpoints that do not yet exist.
   and `{ "success": false, "error": { "code": "...", "message": "..." } }`
   on failure. The health endpoint's degraded response is an exception.
 - Protected routes accept `Authorization: Bearer <JWT>`.
+- Authentication endpoints are rate-limited per client IP: registration allows
+  10 requests per hour and login allows 10 requests per 15 minutes.
 - The JWT is signed with HS256, issued by `fleetcare-api`, intended for
   `fleetcare-client`, and expires after one hour. Protected requests also
   resolve the token subject to an existing user.
@@ -35,9 +37,26 @@ is not a proposal for endpoints that do not yet exist.
 | `GET` | `/api/vehicles/:id` | Bearer JWT | Gets one vehicle owned by the authenticated user |
 | `PUT` | `/api/vehicles/:id` | Bearer JWT | Partially updates one owned vehicle |
 | `DELETE` | `/api/vehicles/:id` | Bearer JWT | Permanently deletes one owned vehicle |
+| `POST` | `/api/diagnostics` | Bearer JWT | Records a trouble code for an owned vehicle |
+| `GET` | `/api/diagnostics` | Bearer JWT | Lists the authenticated user's diagnostic records |
+| `GET` | `/api/diagnostics/:id` | Bearer JWT | Gets one owned diagnostic record |
+| `PATCH` | `/api/diagnostics/:id` | Bearer JWT | Marks an active diagnostic record as resolved |
+| `POST` | `/api/diagnostics/:id/analyze` | Bearer JWT | Returns a non-persisted development analysis |
+| `POST` | `/api/maintenance` | Bearer JWT | Creates a maintenance record |
+| `GET` | `/api/maintenance` | Bearer JWT | Lists the authenticated user's maintenance records |
+| `GET` | `/api/maintenance/:id` | Bearer JWT | Gets one owned maintenance record |
+| `PATCH` | `/api/maintenance/:id` | Bearer JWT | Marks scheduled maintenance as completed |
+| `POST` | `/api/service-requests` | Bearer JWT | Creates a pending request |
+| `GET` | `/api/service-requests` | Bearer JWT | Lists the authenticated user's service requests |
+| `GET` | `/api/service-requests/:id` | Bearer JWT | Gets one owned service request |
+| `PUT` | `/api/service-requests/:id` | Bearer JWT | Replaces editable fields on a pending request |
+| `PATCH` | `/api/service-requests/:id` | Bearer JWT | Applies a permitted status transition |
+| `DELETE` | `/api/service-requests/:id` | Bearer JWT | Permanently deletes a pending request |
 
 No separate controller layer currently exists. Route handlers live in
-`routes/auth.js` and `routes/vehicles.js`; `routes/api.js` mounts them.
+`routes/auth.js`, `routes/vehicles.js`, `routes/diagnostics.js`,
+`routes/maintenance.js`, and `routes/serviceRequests.js`; `routes/api.js`
+mounts them. The additional resource endpoint details are listed below.
 
 ## Authentication
 
@@ -65,6 +84,8 @@ Validation and normalization:
   limited to 254 characters.
 - `password` must be a string of 8 to 72 UTF-8 bytes.
 - Duplicate normalized emails return `409`.
+- Registration rate limiting counts all requests, including malformed requests
+  and duplicate-email attempts.
 - Extra request fields are currently ignored.
 
 Success: `201 Created`
@@ -100,6 +121,10 @@ Email is trimmed and lowercased. Missing/wrongly typed email or password
 returns `400`; malformed email and incorrect credentials return the same
 generic `401` credentials error. Passwords over 72 UTF-8 bytes also return
 that generic `401`.
+
+Login is limited to 10 attempts per client IP per 15 minutes. Requests rejected
+by the limit return `429 Too Many Requests`, code `RATE_LIMIT_EXCEEDED`, and a
+`Retry-After` header.
 
 Success: `200 OK`
 
@@ -287,6 +312,246 @@ Permanently deletes the owner-scoped vehicle. Success is `200 OK` and returns
 the deleted vehicle in the same `data.vehicle` envelope. This is not an
 archive/soft-delete operation.
 
+## Diagnostics
+
+All diagnostic endpoints require a bearer JWT. The owner is always derived
+from the authenticated user. A diagnostic can only be created for a vehicle
+owned by that user; inaccessible vehicles and records are reported as not
+found. Diagnostic trouble codes and severity are recorded information, not
+confirmed component failures or mechanic diagnoses.
+
+| Method | Path | Authentication | Current behavior |
+|---|---|---|---|
+| `POST` | `/api/diagnostics` | Bearer JWT | Records a trouble code for an owned vehicle |
+| `GET` | `/api/diagnostics` | Bearer JWT | Lists the authenticated user's diagnostic records |
+| `GET` | `/api/diagnostics/:id` | Bearer JWT | Gets one owned diagnostic record |
+| `PATCH` | `/api/diagnostics/:id` | Bearer JWT | Marks an active record as resolved |
+| `POST` | `/api/diagnostics/:id/analyze` | Bearer JWT | Returns a non-persisted development analysis |
+
+Diagnostic records store a vehicle reference, code, optional description,
+source, severity, status, detection timestamp, odometer reading and unit,
+optional notes, and timestamps. The database index supports owner/vehicle
+history queries. Records are retained if their vehicle is later permanently
+deleted; in that case the API returns `Vehicle unavailable` for the vehicle
+name.
+
+### `POST /api/diagnostics`
+
+Required JSON fields:
+
+```json
+{
+  "vehicleId": "665f00000000000000000002",
+  "code": "P0301",
+  "severity": "High",
+  "dateDetected": "2026-11-03T10:00:00.000Z",
+  "odometer": 12000,
+  "odometerUnit": "km"
+}
+```
+
+`source` is optional and defaults to `Manual`; accepted values are `Manual`,
+`OBD-II`, `Telematics`, and `Other`. `description` and `notes` are optional.
+Accepted severity values are `Critical`, `High`, `Medium`, and `Low`.
+`odometer` must be a whole number from 0 to 2000000 and its unit must match the
+selected vehicle. `dateDetected` must be an ISO timestamp with a timezone and
+cannot be in the future. OBD-II and SPN/FMI codes are normalized to uppercase.
+Unknown fields, including `owner` and `status`, are rejected.
+
+Success: `201 Created`
+
+```json
+{
+  "success": true,
+  "data": {
+    "diagnostic": {
+      "id": "665f00000000000000000003",
+      "vehicleId": "665f00000000000000000002",
+      "vehicleName": "Delivery Truck",
+      "registrationNumber": "AB123CD",
+      "code": "P0301",
+      "description": "",
+      "issueDescription": "Description not provided",
+      "source": "Manual",
+      "severity": "High",
+      "status": "Active",
+      "dateDetected": "2026-11-03T10:00:00.000Z",
+      "odometer": 12000,
+      "odometerUnit": "km",
+      "notes": "",
+      "createdAt": "2026-11-03T10:01:00.000Z",
+      "updatedAt": "2026-11-03T10:01:00.000Z"
+    }
+  }
+}
+```
+
+### `GET /api/diagnostics`
+
+Returns the authenticated user's records sorted by `dateDetected` descending.
+The optional `vehicleId` query parameter filters the list to a valid vehicle
+ID; an invalid ID returns `400 INVALID_VEHICLE_ID`. Success: `200 OK`, with
+`{ "success": true, "data": { "diagnostics": [ ... ] } }`. Pagination is not
+implemented.
+
+### `GET /api/diagnostics/:id`
+
+Returns one record belonging to the authenticated user with the same
+`data.diagnostic` response shape. A malformed record ID returns
+`400 INVALID_DIAGNOSTIC_ID`; a missing or inaccessible record returns
+`404 NOT_FOUND`.
+
+### `PATCH /api/diagnostics/:id`
+
+Accepts only `{ "status": "Resolved" }` and transitions an active record to
+resolved. Other body fields or status values return `400 INVALID_DIAGNOSTIC`.
+The update is owner-scoped; no general-purpose edit or reopen operation exists.
+Success: `200 OK` with the updated `data.diagnostic`.
+
+### `POST /api/diagnostics/:id/analyze`
+
+Analyzes an owner-scoped diagnostic record without changing it. The request
+does not require a body. Success: `200 OK`, with
+`{ "success": true, "data": { "analysis": { ... } } }`. The response contains
+the provider name, whether the code is supported, possible causes,
+recommended checks, the user-recorded severity, uncertainty, required
+mechanic review, and a human-approval requirement for external actions.
+
+No AI provider or model has been approved. The current backend uses a
+provider-independent service interface with a safe mock adapter; no external
+AI service or API key is configured. The mock adapter contains only a limited
+reference for `P0301`. Other codes return an explicit unsupported result with
+no inferred causes. Provider failures are propagated to centralized error
+handling and do not produce a success-shaped fallback. The frontend displays
+this as a development mock response and no analysis result is persisted.
+Bookings, purchases, and other external actions are not available.
+
+## Maintenance
+
+All maintenance endpoints require a bearer JWT and are scoped to the
+authenticated user. The owner is not accepted from the request body. Each
+record references a vehicle owned by that user.
+
+| Method | Path | Authentication | Current behavior |
+|---|---|---|---|
+| `POST` | `/api/maintenance` | Bearer JWT | Creates a maintenance record |
+| `GET` | `/api/maintenance` | Bearer JWT | Lists the user's maintenance records |
+| `GET` | `/api/maintenance/:id` | Bearer JWT | Gets one owned maintenance record |
+| `PATCH` | `/api/maintenance/:id` | Bearer JWT | Marks scheduled work completed |
+
+### `POST /api/maintenance`
+
+Required JSON fields are `vehicleId`, `type`, `description`,
+`maintenanceDate`, `odometer`, `odometerUnit`, and `status`.
+
+```json
+{
+  "vehicleId": "665f00000000000000000002",
+  "type": "Oil change",
+  "description": "Replace engine oil and inspect fluid levels.",
+  "maintenanceDate": "2026-11-12",
+  "odometer": 12000,
+  "odometerUnit": "km",
+  "status": "Upcoming"
+}
+```
+
+Accepted types are `Oil change`, `Tire rotation`, `Brake inspection`,
+`General servicing`, and `Other`. Status is `Upcoming`, `Overdue`, or
+`Completed`; scheduled status must agree with the date, and completed dates
+cannot be in the future. Odometer must be a whole number from 0 to 2000000 and
+its unit must match the vehicle. Success: `201 Created`, with
+`{ "success": true, "data": { "maintenance": { ... } } }`.
+
+### `GET /api/maintenance` and `GET /api/maintenance/:id`
+
+The list is owner-scoped and sorted by scheduled date ascending. The optional
+`vehicleId` query parameter filters by a valid vehicle ID. Both list and detail
+responses use a `maintenance` object/list containing the record ID, vehicle
+summary, type, description, scheduled date, completion date when applicable,
+odometer and unit, status, and timestamps.
+
+### `PATCH /api/maintenance/:id`
+
+Accepts only `{ "status": "Completed" }`. The completion timestamp is set by
+the server. Only owner-scoped `Upcoming` or `Overdue` records can be completed;
+completed records cannot be transitioned again. This operation records a
+user-reported completion and is not confirmation from a service provider.
+
+## Service requests
+
+All service-request endpoints require a bearer JWT and are scoped to the
+authenticated user. A request is not a service booking; preferred dates do
+not indicate availability or confirmation.
+
+| Method | Path | Authentication | Current behavior |
+|---|---|---|---|
+| `POST` | `/api/service-requests` | Bearer JWT | Creates a Pending request |
+| `GET` | `/api/service-requests` | Bearer JWT | Lists the user's requests |
+| `GET` | `/api/service-requests/:id` | Bearer JWT | Gets one owned request |
+| `PUT` | `/api/service-requests/:id` | Bearer JWT | Replaces editable fields on a Pending request |
+| `PATCH` | `/api/service-requests/:id` | Bearer JWT | Applies a permitted status transition |
+| `DELETE` | `/api/service-requests/:id` | Bearer JWT | Permanently removes a Pending request |
+
+### `POST /api/service-requests`
+
+Required JSON fields are `vehicleId`, `serviceType`, `description`, `priority`,
+and `preferredDate`. `notes` is optional.
+
+```json
+{
+  "vehicleId": "665f00000000000000000002",
+  "serviceType": "General inspection",
+  "description": "Inspect the warning indicator.",
+  "priority": "High",
+  "preferredDate": "2026-11-12",
+  "notes": "Driver reported an intermittent warning."
+}
+```
+
+Accepted service types are `General inspection`, `Engine repair`, `Oil change`,
+`Brake inspection`, `Tire service`, and `Other`; priorities are `Low`,
+`Medium`, `High`, and `Critical`. Preferred dates must be valid and not in the
+past. `requestedDate` and initial `Pending` status are set by the server.
+Success: `201 Created`, with
+`{ "success": true, "data": { "request": { ... } } }`. Request IDs are
+generated from the creation year and database ID.
+
+### `GET /api/service-requests` and `GET /api/service-requests/:id`
+
+The list is owner-scoped, sorted by request date descending, and accepts an
+optional valid `vehicleId` filter. Response objects include `id`, generated
+`requestId`, vehicle summary, service type, description, requested and
+preferred dates, priority, status, notes, and timestamps.
+
+### `PUT /api/service-requests/:id`
+
+Replaces the editable request fields. It is allowed only while the
+owner-scoped request is `Pending`; all editable fields are required. The
+vehicle must also belong to the authenticated user.
+
+### `PATCH /api/service-requests/:id`
+
+Accepts only `{ "status": "<next status>" }`. The allowed transitions are:
+
+| Current status | Allowed next status |
+|---|---|
+| `Pending` | `Approved`, `Rejected` |
+| `Approved` | `In Progress`, `Rejected` |
+| `In Progress` | `Completed` |
+| `Completed` | None |
+| `Rejected` | None |
+
+There is no role or organization membership model, so these transitions are
+currently available to any authenticated owner of the record. Invalid
+transitions return `400 INVALID_STATUS_TRANSITION`.
+
+### `DELETE /api/service-requests/:id`
+
+Permanently deletes only a `Pending` request belonging to the authenticated
+user. Missing, inaccessible, or non-pending requests return `404 NOT_FOUND`.
+No service provider, booking, or external integration is contacted.
+
 ## Errors and status codes
 
 Typical error body:
@@ -303,10 +568,11 @@ Typical error body:
 
 | Status | Current use | Example codes/messages |
 |---|---|---|
-| `400` | Invalid request/body/vehicle ID | `INVALID_INPUT`, `INVALID_VEHICLE`, `INVALID_VEHICLE_ID`, `INVALID_JSON` |
+| `400` | Invalid request/body/resource ID or status transition | `INVALID_INPUT`, `INVALID_VEHICLE`, `INVALID_DIAGNOSTIC`, `INVALID_MAINTENANCE`, `INVALID_SERVICE_REQUEST`, `INVALID_STATUS_TRANSITION`, `INVALID_DIAGNOSTIC_ID`, `INVALID_MAINTENANCE_ID`, `INVALID_SERVICE_REQUEST_ID`, `INVALID_VEHICLE_ID`, `INVALID_JSON` |
 | `401` | Missing/invalid token or invalid credentials | `UNAUTHORIZED`, `INVALID_CREDENTIALS` |
-| `404` | Unknown API route or inaccessible/missing vehicle | `NOT_FOUND` |
-| `409` | Duplicate email or owner-scoped vehicle registration | `EMAIL_ALREADY_REGISTERED`, `REGISTRATION_NUMBER_IN_USE` |
+| `404` | Unknown API route or inaccessible/missing resource | `NOT_FOUND`, `VEHICLE_NOT_FOUND` |
+| `409` | Duplicate registration or concurrent status transition | `EMAIL_ALREADY_REGISTERED`, `REGISTRATION_NUMBER_IN_USE`, `INVALID_STATUS_TRANSITION` |
+| `429` | Authentication request limit exceeded | `RATE_LIMIT_EXCEEDED` |
 | `500` | Unhandled errors, including errors without an explicit route mapping | `INTERNAL_SERVER_ERROR` |
 | `503` | MongoDB is not ready at the health endpoint | Degraded health body described below |
 
@@ -318,6 +584,13 @@ invalid/expired tokens.
 Malformed JSON is handled by centralized middleware as `400 INVALID_JSON`.
 Unhandled server errors are logged server-side and return a generic
 `500 INTERNAL_SERVER_ERROR`; stack traces are not sent in the response.
+
+The authentication rate limit counters are stored in process memory. Limits
+reset when the backend process restarts and are not shared across multiple
+instances, so production deployments with multiple workers/replicas need a
+shared rate-limit store. The limiter uses Express's `req.ip`; `trust proxy` is
+not enabled in the current app. A deployment behind a reverse proxy must
+configure only its trusted proxy hops if the originating client IP is needed.
 
 ### Health response
 
@@ -353,21 +626,45 @@ Unknown routes under `/api` return `404`:
 
 ## Current frontend API usage
 
-`frontend/lib/vehicles-api.js` calls only:
+`frontend/lib/api-client.js` provides the shared bearer-token request helper.
+It reads `localStorage.accessToken`, removes it after a `401`, and uses
+`NEXT_PUBLIC_API_URL` (default `http://localhost:5000`). The authenticated
+frontend clients currently call:
 
+- `GET /api/vehicles`, `GET /api/diagnostics`, and
+  `GET /api/maintenance` when the dashboard loads or is retried.
 - `GET /api/vehicles` when the vehicle page loads or is retried.
 - `POST /api/vehicles` when the Add Vehicle form is submitted.
+- `GET /api/diagnostics` and `GET /api/vehicles` when the diagnostics page loads.
+- `POST /api/diagnostics` when a diagnostic is recorded.
+- `PATCH /api/diagnostics/:id` when an active record is marked resolved.
+- `POST /api/diagnostics/:id/analyze` when the AI workflow analyzes a saved record.
+- `GET /api/maintenance` and `GET /api/vehicles` when maintenance loads.
+- `POST /api/maintenance` when a maintenance record is added.
+- `PATCH /api/maintenance/:id` when scheduled maintenance is completed.
+- `GET /api/service-requests` and `GET /api/vehicles` when requests load.
+- `POST /api/service-requests` when a request is submitted.
+- `PUT /api/service-requests/:id` when a pending request is edited.
+- `PATCH /api/service-requests/:id` when its status changes.
+- `DELETE /api/service-requests/:id` when a pending request is cancelled.
 
-Both use the bearer token from `localStorage.accessToken`. The form maps its
-UI fields to the backend contract (`name` to `vehicleName`, `manufacturer` to
-`make`, and `odometerKm` to `odometer` with `odometerUnit: "km"`). The client
-uses the `data.vehicles` and `data.vehicle` success properties and displays
-backend error messages. It removes the stored token after a `401`.
+Requests use the bearer token from `localStorage.accessToken`. The vehicle
+form maps its UI fields to the backend contract (`name` to `vehicleName`,
+`manufacturer` to `make`, and `odometerKm` to `odometer` with
+`odometerUnit: "km"`). Diagnostic creation uses the selected vehicle's
+odometer unit and sends a timezone-qualified timestamp. Maintenance and
+service-request flows send the authenticated vehicle ID and validated form
+fields. Clients use their resource-specific `data` properties and display API
+errors. A `401` removes the stored token and the page displays the
+authentication error; this frontend does not currently provide a login screen
+or automatic redirect.
 
 The frontend does not currently call the login/register/current-user, vehicle
-detail, update, or delete endpoints. There is no frontend diagnostic,
-maintenance, service-request, AI, parts, or dashboard API client in the
-current code.
+detail, update, or delete endpoints. Diagnostic capture, AI mock analysis,
+maintenance, and service requests are connected to backend APIs. Parts and
+external booking/provider integrations do not exist. Dashboard vehicle totals
+and health distribution use saved vehicles; recent diagnostic activity and
+upcoming maintenance use their persisted records.
 
 ## Inconsistencies and incomplete contracts
 
@@ -411,9 +708,10 @@ These are observations, not runtime changes:
 11. **Error codes are not centrally specified:** codes are defined inline in
     route/middleware code. There is no shared error-code registry or formal
     OpenAPI schema.
-12. **No diagnostic, maintenance, service-request, or parts APIs:** their
-    current frontend features use local/sample data and do not have backend
-    contracts in this repository.
+12. **Remaining integrations:** diagnostics, maintenance, and service
+    requests are persisted. AI responses use only a bounded mock adapter
+    because no provider is approved; parts and external-service integrations
+    remain unimplemented.
 
 ## Recommended convention for future modules
 

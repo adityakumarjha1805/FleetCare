@@ -3,7 +3,10 @@
 import Link from "next/link";
 import { useEffect, useMemo, useRef, useState } from "react";
 import AppShell from "./app-shell";
-import { initialVehicleData } from "./mock-fleet-data";
+import {
+  createVehicle as createVehicleRequest,
+  fetchVehicles,
+} from "../lib/vehicles-api";
 
 const statusOptions = ["All", "Healthy", "Needs Attention", "Critical"];
 const vehicleTypes = ["Car", "Van", "Pickup", "Truck", "Other"];
@@ -47,6 +50,34 @@ function formatOdometer(value) {
   return new Intl.NumberFormat("en-US").format(value);
 }
 
+function toDisplayVehicle(vehicle) {
+  return {
+    id: vehicle.id,
+    name: vehicle.vehicleName,
+    registrationNumber: vehicle.registrationNumber,
+    manufacturer: vehicle.make,
+    model: vehicle.model,
+    year: vehicle.year,
+    odometerKm: vehicle.odometer,
+    odometerUnit: vehicle.odometerUnit,
+    vehicleType: vehicle.vehicleType,
+    status: vehicle.healthStatus,
+  };
+}
+
+function getRequestErrorMessage(error) {
+  if (error.status === 401) {
+    return "Your session is missing or expired. Sign in again to manage vehicles.";
+  }
+  if (error.status === 409) {
+    return error.message || "A vehicle with this registration number already exists.";
+  }
+  if (!error.status) {
+    return "Unable to connect to FleetCare. Check that the backend is running and try again.";
+  }
+  return error.message || "Unable to complete the vehicle request. Please try again.";
+}
+
 function StatusBadge({ status }) {
   const tone = status.toLowerCase().replaceAll(" ", "-");
 
@@ -65,6 +96,7 @@ function VehicleDialog({
   formValues,
   errors,
   formMessage,
+  isSavingVehicle,
   onChange,
   onSubmit,
   onClose,
@@ -102,7 +134,7 @@ function VehicleDialog({
           </div>
 
           <p className="form-data-note">
-            Vehicle records are temporary and stored only in this page session.
+            Vehicle records are saved to your authenticated fleet.
           </p>
 
           {formMessage && (
@@ -288,8 +320,12 @@ function VehicleDialog({
             <button className="secondary-button" type="button" onClick={onClose}>
               Cancel
             </button>
-            <button className="primary-action" type="submit">
-              Add Vehicle
+            <button
+              className="primary-action"
+              type="submit"
+              disabled={isSavingVehicle}
+            >
+              {isSavingVehicle ? "Saving..." : "Add Vehicle"}
             </button>
           </div>
         </form>
@@ -304,7 +340,7 @@ function VehicleDialog({
                 <p className="eyebrow">VEHICLE RECORD</p>
                 <h2 id="vehicle-details-title">{selectedVehicle.name}</h2>
                 <p className="dialog-description">
-                  Details currently available in this temporary fleet list.
+                  Vehicle details saved to your fleet.
                 </p>
               </div>
               <button
@@ -333,7 +369,10 @@ function VehicleDialog({
               </div>
               <div>
                 <dt>Odometer</dt>
-                <dd>{formatOdometer(selectedVehicle.odometerKm)} km</dd>
+                <dd>
+                  {formatOdometer(selectedVehicle.odometerKm)}{" "}
+                  {selectedVehicle.odometerUnit || "km"}
+                </dd>
               </div>
               <div>
                 <dt>Vehicle type</dt>
@@ -363,7 +402,12 @@ function VehicleDialog({
 }
 
 export default function VehicleManagement() {
-  const [vehicles, setVehicles] = useState(initialVehicleData);
+  const [vehicles, setVehicles] = useState([]);
+  const [isLoadingVehicles, setIsLoadingVehicles] = useState(true);
+  const [vehicleLoadError, setVehicleLoadError] = useState("");
+  const [reloadVehicles, setReloadVehicles] = useState(0);
+  const [isSavingVehicle, setIsSavingVehicle] = useState(false);
+  const [pageNotice, setPageNotice] = useState(null);
   const [searchQuery, setSearchQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState("All");
   const [activeDialog, setActiveDialog] = useState(null);
@@ -374,6 +418,26 @@ export default function VehicleManagement() {
 
   const dialogRef = useRef(null);
   const lastTriggerRef = useRef(null);
+
+  useEffect(() => {
+    const controller = new AbortController();
+
+    fetchVehicles({ signal: controller.signal })
+      .then((records) => {
+        setVehicles(records.map(toDisplayVehicle));
+      })
+      .catch((error) => {
+        if (error.name === "AbortError") return;
+        setVehicleLoadError(getRequestErrorMessage(error));
+      })
+      .finally(() => {
+        if (!controller.signal.aborted) {
+          setIsLoadingVehicles(false);
+        }
+      });
+
+    return () => controller.abort();
+  }, [reloadVehicles]);
 
   useEffect(() => {
     const dialog = dialogRef.current;
@@ -413,6 +477,7 @@ export default function VehicleManagement() {
     setFormValues(emptyForm);
     setErrors({});
     setFormMessage("");
+    setPageNotice(null);
     setSelectedVehicle(null);
     setActiveDialog("add");
   }
@@ -501,8 +566,9 @@ export default function VehicleManagement() {
     return { nextErrors, trimmedValues };
   }
 
-  function handleSubmit(event) {
+  async function handleSubmit(event) {
     event.preventDefault();
+    if (isSavingVehicle) return;
     const { nextErrors, trimmedValues } = validateForm();
 
     if (Object.keys(nextErrors).length > 0) {
@@ -514,23 +580,38 @@ export default function VehicleManagement() {
       return;
     }
 
-    const registrationNumber = trimmedValues.registrationNumber.toUpperCase();
-    const newVehicle = {
-      id: `vehicle-${globalThis.crypto.randomUUID()}`,
-      name: trimmedValues.name,
-      registrationNumber,
-      manufacturer: trimmedValues.manufacturer,
-      model: trimmedValues.model,
-      year: Number(trimmedValues.year),
-      odometerKm: Number(trimmedValues.odometerKm),
-      vehicleType: trimmedValues.vehicleType,
-      status: "Healthy",
-    };
+    setIsSavingVehicle(true);
+    setFormMessage("");
 
-    setVehicles((current) => [newVehicle, ...current]);
-    setSearchQuery("");
-    setStatusFilter("All");
-    closeDialog();
+    try {
+      const createdVehicle = await createVehicleRequest({
+        vehicleName: trimmedValues.name,
+        registrationNumber: trimmedValues.registrationNumber,
+        make: trimmedValues.manufacturer,
+        model: trimmedValues.model,
+        year: Number(trimmedValues.year),
+        vehicleType: trimmedValues.vehicleType,
+        odometer: Number(trimmedValues.odometerKm),
+        odometerUnit: "km",
+      });
+
+      const displayVehicle = toDisplayVehicle(createdVehicle);
+      setVehicles((current) => [
+        displayVehicle,
+        ...current.filter((vehicle) => vehicle.id !== displayVehicle.id),
+      ]);
+      setSearchQuery("");
+      setStatusFilter("All");
+      setPageNotice({
+        type: "success",
+        message: "Vehicle added to your fleet.",
+      });
+      closeDialog();
+    } catch (error) {
+      setFormMessage(getRequestErrorMessage(error));
+    } finally {
+      setIsSavingVehicle(false);
+    }
   }
 
   return (
@@ -543,8 +624,7 @@ export default function VehicleManagement() {
               View and manage the vehicles in your fleet.
             </p>
             <p className="vehicle-data-note">
-              Sample vehicle data; new vehicles are saved in this page session
-              only.
+              Vehicles are loaded from your saved fleet.
             </p>
           </div>
           <button
@@ -556,6 +636,19 @@ export default function VehicleManagement() {
             Add Vehicle
           </button>
         </header>
+
+        {pageNotice && (
+          <p
+            className={
+              pageNotice.type === "error"
+                ? "form-error-summary"
+                : "form-data-note"
+            }
+            role={pageNotice.type === "error" ? "alert" : "status"}
+          >
+            {pageNotice.message}
+          </p>
+        )}
 
         <section className="vehicle-list-panel" aria-labelledby="vehicle-list-title">
           <div className="vehicle-list-heading">
@@ -620,7 +713,27 @@ export default function VehicleManagement() {
             </div>
           </div>
 
-          {visibleVehicles.length > 0 ? (
+          {isLoadingVehicles ? (
+            <p className="form-data-note" role="status" aria-live="polite">
+              Loading your vehicles...
+            </p>
+          ) : vehicleLoadError ? (
+            <div className="vehicle-empty-state" role="alert">
+              <h3>Unable to load vehicles</h3>
+              <p>{vehicleLoadError}</p>
+              <button
+                className="text-action"
+                type="button"
+                onClick={() => {
+                  setIsLoadingVehicles(true);
+                  setVehicleLoadError("");
+                  setReloadVehicles((current) => current + 1);
+                }}
+              >
+                Try again
+              </button>
+            </div>
+          ) : visibleVehicles.length > 0 ? (
             <ul className="vehicle-grid" aria-label="Fleet vehicles">
               {visibleVehicles.map((vehicle) => (
                 <li className="vehicle-card" key={vehicle.id}>
@@ -647,7 +760,10 @@ export default function VehicleManagement() {
                       </div>
                       <div>
                         <dt>Odometer</dt>
-                        <dd>{formatOdometer(vehicle.odometerKm)} km</dd>
+                        <dd>
+                          {formatOdometer(vehicle.odometerKm)}{" "}
+                          {vehicle.odometerUnit || "km"}
+                        </dd>
                       </div>
                       <div>
                         <dt>Type</dt>
@@ -718,6 +834,7 @@ export default function VehicleManagement() {
           formValues={formValues}
           errors={errors}
           formMessage={formMessage}
+          isSavingVehicle={isSavingVehicle}
           onChange={handleFormChange}
           onSubmit={handleSubmit}
           onClose={closeDialog}

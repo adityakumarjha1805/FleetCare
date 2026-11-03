@@ -31,6 +31,11 @@ if (
   throw new Error('FRONTEND_ORIGIN must be a valid HTTP or HTTPS origin');
 }
 
+const jwtSecret = required('JWT_SECRET');
+if (Buffer.byteLength(jwtSecret, 'utf8') < 32) {
+  throw new Error('JWT_SECRET must be at least 32 bytes long');
+}
+
 const port = Number(process.env.PORT || 5000);
 if (!Number.isInteger(port) || port < 1 || port > 65535) {
   throw new Error('PORT must be an integer between 1 and 65535');
@@ -40,4 +45,5 @@ module.exports = Object.freeze({
   port,
   mongodbUri,
   frontendOrigin: parsedFrontendOrigin.origin,
+  jwtSecret,
 });

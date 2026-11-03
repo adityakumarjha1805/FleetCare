@@ -11,7 +11,7 @@ app.use(
   cors({
     origin: config.frontendOrigin,
     methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
-    allowedHeaders: ['Content-Type'],
+    allowedHeaders: ['Content-Type', 'Authorization'],
   }),
 );
 app.use(express.json({ limit: '1mb' }));

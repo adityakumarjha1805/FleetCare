@@ -2,6 +2,8 @@ const assert = require('node:assert/strict');
 const { after, before, test } = require('node:test');
 const errorHandler = require('../middleware/errorHandler');
 
+process.env.JWT_SECRET = 'fleetcare-foundation-tests-use-a-32-byte-secret';
+
 if (!process.env.MONGODB_URI) {
   process.env.MONGODB_URI = 'mongodb://127.0.0.1:27017/fleetcare_test';
 }

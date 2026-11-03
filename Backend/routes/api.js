@@ -2,6 +2,7 @@ const express = require('express');
 const mongoose = require('mongoose');
 const notFound = require('../middleware/notFound');
 const authRouter = require('./auth');
+const vehiclesRouter = require('./vehicles');
 
 const router = express.Router();
 
@@ -20,6 +21,7 @@ router.get('/health', (req, res) => {
 });
 
 router.use('/auth', authRouter);
+router.use('/vehicles', vehiclesRouter);
 router.use(notFound);
 
 module.exports = router;

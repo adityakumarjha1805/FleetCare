@@ -3,8 +3,11 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
-import { ApiError } from "../lib/api-client";
-import { loginUser, registerUser } from "../lib/auth-api";
+import {
+  getAuthErrorMessage,
+  loginUser,
+  registerUser,
+} from "../lib/auth-api";
 
 const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const PENDING_CHALLENGE_KEY = "fleetcare.pendingEmailVerification";
@@ -88,11 +91,7 @@ export default function AuthPage({ mode }) {
       );
       router.push("/verify-email");
     } catch (requestError) {
-      setError(
-        requestError instanceof ApiError
-          ? requestError.message
-          : "Unable to continue. Please try again.",
-      );
+      setError(getAuthErrorMessage(requestError));
     } finally {
       setIsSubmitting(false);
     }

@@ -172,6 +172,14 @@ function assertNoAuthCookie(response) {
   assert.equal(response.headers.get('set-cookie'), null);
 }
 
+function duplicateKeyError(field, value) {
+  return Object.assign(new Error('Duplicate key'), {
+    code: 11000,
+    keyPattern: { [field]: 1 },
+    keyValue: { [field]: value },
+  });
+}
+
 test('registration validates input, hashes passwords, and sends an OTP without verifying the account', async () => {
   const userCountBefore = users.size;
   const { response, body } = await register(
@@ -202,6 +210,33 @@ test('registration validates input, hashes passwords, and sends an OTP without v
     OTP_TTL_MS - 60_000,
   );
   assertNoAuthCookie(response);
+});
+
+test('new normalized email registers once and repeat registration returns a duplicate response', async () => {
+  const email = `new-registration-${Date.now()}@example.test`;
+  const userCountBefore = users.size;
+  const registration = await register(`  ${email.toUpperCase()}  `);
+  const user = users.get(email);
+
+  assert.equal(registration.response.status, 201);
+  assert.equal(registration.body.success, true);
+  assert.equal(users.size, userCountBefore + 1);
+  assert.equal(user.email, email);
+
+  const verified = await verify(
+    registration.body.data.challengeId,
+    latestOtp(email),
+  );
+  assert.equal(verified.status, 200);
+
+  const repeatedRegistration = await register(email);
+  assert.equal(repeatedRegistration.response.status, 409);
+  assert.equal(
+    repeatedRegistration.body.error.message,
+    'Account already exists. Please sign in.',
+  );
+  assert.equal(users.size, userCountBefore + 1);
+  assert.equal(users.get(email), user);
 });
 
 test('registration rejects verified duplicates and invalid fields', async () => {
@@ -276,6 +311,68 @@ test('registration refreshes verification for pending users without creating dup
   assert.equal(overLimitRetry.body.error.code, 'OTP_RESEND_LIMIT_EXCEEDED');
   assert.equal(sentOtps.length, sentOtpCount);
   assert.equal(users.get('limited@example.com'), limitedUser);
+});
+
+test('registration maps only email-index duplicate-key races to duplicate-account responses', async () => {
+  const previousCreate = User.create;
+  const previousFindOne = User.findOne;
+  const previousConsoleError = console.error;
+  const unrelatedEmail = `unrelated-index-${Date.now()}@example.test`;
+  const emailRace = `email-race-${Date.now()}@example.test`;
+  const userCountBefore = users.size;
+
+  try {
+    console.error = () => {};
+    User.create = async () => {
+      throw duplicateKeyError('externalId', 'collision');
+    };
+
+    const unrelatedDuplicate = await register(unrelatedEmail);
+    assert.equal(unrelatedDuplicate.response.status, 500);
+    assert.equal(
+      unrelatedDuplicate.body.error.code,
+      'INTERNAL_SERVER_ERROR',
+    );
+    assert.equal(
+      unrelatedDuplicate.body.error.message,
+      'An unexpected error occurred',
+    );
+    assert.equal(users.size, userCountBefore);
+
+    const existingUser = {
+      _id: new mongoose.Types.ObjectId(),
+      email: emailRace,
+      emailVerified: true,
+    };
+    users.set(emailRace, existingUser);
+    let emailLookups = 0;
+    User.findOne = (filter) => {
+      if (filter.email === emailRace) {
+        emailLookups += 1;
+        return queryFor(emailLookups === 1 ? null : existingUser);
+      }
+      return previousFindOne(filter);
+    };
+    User.create = async () => {
+      throw duplicateKeyError('email', emailRace);
+    };
+
+    const actualEmailDuplicate = await register(emailRace.toUpperCase());
+    assert.equal(actualEmailDuplicate.response.status, 409);
+    assert.equal(
+      actualEmailDuplicate.body.error.code,
+      'EMAIL_ALREADY_REGISTERED',
+    );
+    assert.equal(
+      actualEmailDuplicate.body.error.message,
+      'Account already exists. Please sign in.',
+    );
+    assert.equal(users.size, userCountBefore + 1);
+  } finally {
+    User.create = previousCreate;
+    User.findOne = previousFindOne;
+    console.error = previousConsoleError;
+  }
 });
 
 test('login with correct credentials initiates OTP and does not issue a JWT', async () => {

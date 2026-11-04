@@ -1,4 +1,4 @@
-import { ApiError, getApiBaseUrl } from "./api-client";
+import { ApiError, getApiBaseUrl } from "./api-client.js";
 
 let currentUserRequest;
 
@@ -84,6 +84,12 @@ function assertVerificationChallenge(data) {
 export async function registerUser({ name, email, password }) {
   const data = await requestAuth("register", { name, email, password });
   return assertVerificationChallenge(data);
+}
+
+export function getAuthErrorMessage(error) {
+  return error instanceof ApiError
+    ? error.message
+    : "Unable to continue. Please try again.";
 }
 
 export async function loginUser({ email, password }) {

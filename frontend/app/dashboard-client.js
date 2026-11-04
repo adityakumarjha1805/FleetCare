@@ -257,7 +257,7 @@ export default function Home() {
               diagnostic, and maintenance records.
             </p>
           </div>
-          <Link className="primary-action" href="/vehicles" prefetch={false}>
+          <Link className="primary-action" href="/vehicles">
             <DashboardIcon name="plus" />
             <span>Add Vehicle</span>
           </Link>
@@ -306,7 +306,6 @@ export default function Home() {
                 <Link
                   className="text-action"
                   href="/diagnostics"
-                  prefetch={false}
                 >
                   View diagnostics
                 </Link>
@@ -377,7 +376,6 @@ export default function Home() {
                 <Link
                   className="text-action"
                   href="/maintenance"
-                  prefetch={false}
                 >
                   View schedule
                 </Link>
@@ -506,7 +504,6 @@ export default function Home() {
                     className="quick-action"
                     href={action.href}
                     key={action.label}
-                    prefetch={false}
                   >
                     <span className="quick-action-icon">
                       <DashboardIcon name={action.icon} />

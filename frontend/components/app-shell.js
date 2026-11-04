@@ -253,7 +253,6 @@ export default function AppShell({
               className="nav-link"
               href={item.href}
               key={item.href}
-              prefetch={false}
               aria-label={item.label}
               aria-current={
                 item.href === "/"

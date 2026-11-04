@@ -1,5 +1,7 @@
 import { ApiError, getApiBaseUrl } from "./api-client";
 
+let currentUserRequest;
+
 async function requestAuth(path, body) {
   const baseUrl = getApiBaseUrl();
 
@@ -91,7 +93,9 @@ export async function loginUser({ email, password }) {
 
 export async function verifyEmailOtp({ challengeId, otp }) {
   const data = await requestAuth("verify-otp", { challengeId, otp });
-  return assertUser(data?.user);
+  const user = assertUser(data?.user);
+  window.dispatchEvent(new Event("fleetcare:session-authenticated"));
+  return user;
 }
 
 export async function resendEmailOtp(challengeId) {
@@ -106,50 +110,69 @@ export async function resendEmailOtp(challengeId) {
   return data;
 }
 
-export async function fetchCurrentUser() {
+export function fetchCurrentUser() {
   if (typeof window === "undefined") {
-    throw new ApiError("Authentication is required.", 401, "UNAUTHORIZED");
-  }
-  const baseUrl = getApiBaseUrl();
-
-  let response;
-  try {
-    response = await fetch(`${baseUrl}/api/auth/me`, {
-      headers: {
-        Accept: "application/json",
-      },
-      credentials: "include",
-    });
-  } catch {
-    throw new ApiError(
-      "Unable to verify your session. Check your connection and try again.",
-      0,
-      "NETWORK_ERROR",
+    return Promise.reject(
+      new ApiError("Authentication is required.", 401, "UNAUTHORIZED"),
     );
   }
 
-  let payload;
-  try {
-    payload = await response.json();
-  } catch {
-    throw new ApiError(
-      "The server returned an invalid response. Please try again.",
-      response.status,
-      "INVALID_RESPONSE",
-    );
-  }
+  if (currentUserRequest) return currentUserRequest;
 
-  if (!response.ok || payload?.success !== true) {
-    throw new ApiError(
-      payload?.error?.message || "Unable to verify your session.",
-      response.status,
-      payload?.error?.code || "REQUEST_FAILED",
-    );
-  }
+  const request = (async () => {
+    const baseUrl = getApiBaseUrl();
+    let response;
+    try {
+      response = await fetch(`${baseUrl}/api/auth/me`, {
+        headers: {
+          Accept: "application/json",
+        },
+        credentials: "include",
+      });
+    } catch {
+      throw new ApiError(
+        "Unable to verify your session. Check your connection and try again.",
+        0,
+        "NETWORK_ERROR",
+      );
+    }
 
-  return assertUser(payload.data?.user);
+    let payload;
+    try {
+      payload = await response.json();
+    } catch {
+      throw new ApiError(
+        "The server returned an invalid response. Please try again.",
+        response.status,
+        "INVALID_RESPONSE",
+      );
+    }
+
+    if (!response.ok || payload?.success !== true) {
+      throw new ApiError(
+        payload?.error?.message || "Unable to verify your session.",
+        response.status,
+        payload?.error?.code || "REQUEST_FAILED",
+      );
+    }
+
+    return assertUser(payload.data?.user);
+  })();
+
+  currentUserRequest = request.finally(() => {
+    currentUserRequest = null;
+  });
+  return currentUserRequest;
 }
 
 export async function logoutUser() {
-  await requestAuth("logout");
+  try {
+    await requestAuth("logout");
+  } catch (error) {
+    if (error.status === 401) {
+      window.dispatchEvent(new Event("fleetcare:unauthorized"));
+    }
+    throw error;
+  }
+  window.dispatchEvent(new Event("fleetcare:session-ended"));
 }

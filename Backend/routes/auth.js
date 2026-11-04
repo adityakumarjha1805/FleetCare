@@ -184,6 +184,120 @@ function clearChallengeState() {
   return Object.fromEntries(CHALLENGE_STATE_FIELDS.map((field) => [field, 1]));
 }
 
+async function restartPendingEmailVerification(user) {
+  const now = new Date();
+  const resendCount = user.emailVerificationResendCount || 0;
+
+  if (resendCount >= MAX_OTP_RESENDS) {
+    return {
+      error: {
+        code: 'OTP_RESEND_LIMIT_EXCEEDED',
+        message: 'Too many verification code requests. Please try again later.',
+      },
+    };
+  }
+
+  if (
+    user.emailVerificationResendAvailableAt &&
+    user.emailVerificationResendAvailableAt > now
+  ) {
+    return {
+      error: {
+        code: 'OTP_RESEND_COOLDOWN',
+        message: 'Please wait before requesting another verification code.',
+      },
+      retryAfter: Math.max(
+        1,
+        Math.ceil(
+          (user.emailVerificationResendAvailableAt.getTime() - now.getTime()) /
+            1000,
+        ),
+      ),
+    };
+  }
+
+  const challenge = generateChallenge(now.getTime());
+  const otp = generateOtp(now.getTime());
+  const filter = {
+    _id: user._id,
+    emailVerified: false,
+    $and: [
+      {
+        $or: [
+          { emailVerificationResendCount: { $lt: MAX_OTP_RESENDS } },
+          { emailVerificationResendCount: { $exists: false } },
+        ],
+      },
+      {
+        $or: [
+          { emailVerificationResendAvailableAt: { $lte: now } },
+          { emailVerificationResendAvailableAt: { $exists: false } },
+        ],
+      },
+    ],
+  };
+  const update = await User.updateOne(filter, {
+    $set: {
+      emailVerificationChallengeHash: hashChallenge(
+        challenge.challengeId,
+        OTP_HASHING_SECRET,
+      ),
+      emailVerificationChallengeExpiresAt: challenge.expiresAt,
+      emailVerificationOtpHash: hashOtp(otp.code, OTP_HASHING_SECRET),
+      emailVerificationOtpExpiresAt: otp.expiresAt,
+      emailVerificationFailedAttempts: 0,
+      emailVerificationResendAvailableAt: new Date(
+        now.getTime() + OTP_RESEND_COOLDOWN_MS,
+      ),
+    },
+    $inc: { emailVerificationResendCount: 1 },
+  });
+
+  if (update.matchedCount !== 1) {
+    return {
+      error: {
+        code: 'OTP_RESEND_COOLDOWN',
+        message: 'Please wait before requesting another verification code.',
+      },
+      retryAfter: 60,
+    };
+  }
+
+  await emailService.sendOtpVerificationEmail(user.email, otp.code);
+  return { challengeId: challenge.challengeId };
+}
+
+async function handleExistingRegistration(user, res) {
+  if (user.emailVerified) {
+    return res.status(409).json({
+      success: false,
+      error: {
+        code: 'EMAIL_ALREADY_REGISTERED',
+        message: 'Account already exists. Please sign in.',
+      },
+    });
+  }
+
+  const result = await restartPendingEmailVerification(user);
+  if (result.error) {
+    if (result.retryAfter) {
+      res.set('Retry-After', String(result.retryAfter));
+    }
+    return res.status(429).json({
+      success: false,
+      error: result.error,
+    });
+  }
+
+  return res.json({
+    success: true,
+    data: {
+      verificationRequired: true,
+      challengeId: result.challengeId,
+    },
+  });
+}
+
 router.post('/register', registrationRateLimiter, async (req, res, next) => {
   if (!isRecord(req.body)) {
     return invalidInput(res, 'A JSON object with name, email, and password is required');
@@ -211,22 +325,36 @@ router.post('/register', registrationRateLimiter, async (req, res, next) => {
   }
 
   try {
-    const existingUser = await User.findOne({ email }).select('_id');
+    const registrationUserFields =
+      '_id email emailVerified +emailVerificationResendAvailableAt +emailVerificationResendCount';
+    const existingUser = await User.findOne({ email }).select(
+      registrationUserFields,
+    );
     if (existingUser) {
-      return res.status(409).json({
-        success: false,
-        error: {
-          code: 'EMAIL_ALREADY_REGISTERED',
-          message: 'An account with this email already exists',
-        },
-      });
+      return await handleExistingRegistration(existingUser, res);
     }
 
-    const user = await User.create({
-      name,
-      email,
-      password,
-    });
+    let user;
+    try {
+      user = await User.create({
+        name,
+        email,
+        password,
+      });
+    } catch (error) {
+      if (error.code !== 11000) {
+        throw error;
+      }
+
+      const racedUser = await User.findOne({ email }).select(
+        registrationUserFields,
+      );
+      if (!racedUser) {
+        throw error;
+      }
+      return await handleExistingRegistration(racedUser, res);
+    }
+
     const challengeId = await beginEmailVerification(user);
 
     return res.status(201).json({

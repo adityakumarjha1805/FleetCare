@@ -29,8 +29,18 @@ let requestSequence = 0;
 
 function isMatch(user, filter) {
   return Object.entries(filter).every(([key, expected]) => {
+    if (key === '$and') {
+      return expected.every((condition) => isMatch(user, condition));
+    }
+    if (key === '$or') {
+      return expected.some((condition) => isMatch(user, condition));
+    }
+
     const actual = user[key];
     if (expected && typeof expected === 'object' && !(expected instanceof Date)) {
+      if ('$exists' in expected) {
+        return (actual !== undefined) === expected.$exists;
+      }
       if ('$gt' in expected) return actual > expected.$gt;
       if ('$gte' in expected) return actual >= expected.$gte;
       if ('$lt' in expected) return actual < expected.$lt;
@@ -163,6 +173,7 @@ function assertNoAuthCookie(response) {
 }
 
 test('registration validates input, hashes passwords, and sends an OTP without verifying the account', async () => {
+  const userCountBefore = users.size;
   const { response, body } = await register(
     '  Manager@Example.com ',
     '  Fleet Manager  ',
@@ -175,6 +186,8 @@ test('registration validates input, hashes passwords, and sends an OTP without v
   assert.match(body.data.challengeId, /^[A-Za-z0-9_-]{43}$/);
   assert.equal(Object.hasOwn(body.data, 'user'), false);
   assert.equal(storedUser.name, 'Fleet Manager');
+  assert.equal(storedUser.email, 'manager@example.com');
+  assert.equal(users.size, userCountBefore + 1);
   assert.equal(storedUser.emailVerified, false);
   assert.notEqual(storedUser.emailVerificationChallengeHash, body.data.challengeId);
   assert.equal(Object.hasOwn(body.data, 'otp'), false);
@@ -191,10 +204,21 @@ test('registration validates input, hashes passwords, and sends an OTP without v
   assertNoAuthCookie(response);
 });
 
-test('registration rejects duplicate normalized emails and invalid fields', async () => {
-  const duplicate = await register('MANAGER@example.com', 'Another Manager');
+test('registration rejects verified duplicates and invalid fields', async () => {
+  const firstRegistration = await register('verified@example.com');
+  const verifiedUser = users.get('verified@example.com');
+  verifiedUser.emailVerified = true;
+  const userCount = users.size;
+  const sentOtpCount = sentOtps.length;
+
+  const duplicate = await register(' VERIFIED@EXAMPLE.COM ');
   assert.equal(duplicate.response.status, 409);
   assert.equal(duplicate.body.error.code, 'EMAIL_ALREADY_REGISTERED');
+  assert.equal(duplicate.body.error.message, 'Account already exists. Please sign in.');
+  assert.equal(users.get('verified@example.com'), verifiedUser);
+  assert.equal(users.size, userCount);
+  assert.equal(sentOtps.length, sentOtpCount);
+  assert.equal(firstRegistration.response.status, 201);
 
   const invalidCases = [
     { name: '', email: 'valid@example.com', password: 'FleetCare123' },
@@ -207,6 +231,51 @@ test('registration rejects duplicate normalized emails and invalid fields', asyn
     const response = await post('register', body);
     assert.equal(response.status, 400);
   }
+});
+
+test('registration refreshes verification for pending users without creating duplicates', async () => {
+  const firstRegistration = await register('pending@example.com');
+  const user = users.get('pending@example.com');
+  const originalChallengeId = firstRegistration.body.data.challengeId;
+  const originalOtp = latestOtp(user.email);
+  const userCount = users.size;
+
+  const immediateRetry = await register(' PENDING@EXAMPLE.COM ');
+  assert.equal(immediateRetry.response.status, 429);
+  assert.equal(immediateRetry.body.error.code, 'OTP_RESEND_COOLDOWN');
+
+  user.emailVerificationResendAvailableAt = new Date(Date.now() - 1);
+  const refreshedRegistration = await register(' PENDING@EXAMPLE.COM ');
+
+  assert.equal(refreshedRegistration.response.status, 200);
+  assert.equal(refreshedRegistration.body.success, true);
+  assert.equal(refreshedRegistration.body.data.verificationRequired, true);
+  assert.notEqual(refreshedRegistration.body.data.challengeId, originalChallengeId);
+  assert.equal(users.size, userCount);
+  assert.equal(user.emailVerified, false);
+  assert.equal(user.emailVerificationResendCount, 1);
+
+  const oldChallenge = await verify(originalChallengeId, originalOtp);
+  assert.equal(oldChallenge.status, 401);
+  assert.equal((await oldChallenge.json()).error.code, 'INVALID_CHALLENGE');
+
+  const verified = await verify(
+    refreshedRegistration.body.data.challengeId,
+    latestOtp(user.email),
+  );
+  assert.equal(verified.status, 200);
+  assert.equal(user.emailVerified, true);
+
+  await register('limited@example.com');
+  const limitedUser = users.get('limited@example.com');
+  limitedUser.emailVerificationResendCount = 5;
+  limitedUser.emailVerificationResendAvailableAt = new Date(Date.now() - 1);
+  const sentOtpCount = sentOtps.length;
+  const overLimitRetry = await register('LIMITED@example.com');
+  assert.equal(overLimitRetry.response.status, 429);
+  assert.equal(overLimitRetry.body.error.code, 'OTP_RESEND_LIMIT_EXCEEDED');
+  assert.equal(sentOtps.length, sentOtpCount);
+  assert.equal(users.get('limited@example.com'), limitedUser);
 });
 
 test('login with correct credentials initiates OTP and does not issue a JWT', async () => {

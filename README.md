@@ -45,12 +45,13 @@ Set these variables in `Backend\.env`:
 `Backend\.env.example` provides placeholders for local development. Do not
 commit `.env` or put secrets in frontend variables.
 
-The backend email service requires `SMTP_HOST`, `SMTP_PORT`, `SMTP_SECURE`,
-`SMTP_USER`, `SMTP_PASS`, and `SMTP_FROM` together. Registration and login
-send email verification codes; configure these SMTP settings in the backend
-environment only. Without them, the auth endpoints return a clear
+The backend sends email verification codes through the Resend HTTPS API.
+Configure `RESEND_API_KEY` and `RESEND_FROM` together in the backend
+environment only. `RESEND_FROM` must use a sender address verified with
+Resend. Without these variables, the auth endpoints return a clear
 `503 EMAIL_SERVICE_UNAVAILABLE` response rather than attempting an incomplete
-login or registration.
+login or registration. Resend uses HTTPS, so it avoids SMTP port restrictions
+on hosts such as Render Free. Never put the API key in frontend variables.
 
 ### Frontend
 
@@ -89,9 +90,9 @@ repository:
    | `JWT_SECRET` | A unique random secret of at least 32 bytes |
    | `AUTH_COOKIE_SAME_SITE` | `None` for the separately hosted frontend and API |
 
-   To enable backend email delivery, also configure `SMTP_HOST`, `SMTP_PORT`,
-   `SMTP_SECURE`, `SMTP_USER`, `SMTP_PASS`, and `SMTP_FROM` in the API
-   project's environment settings.
+   To enable backend email delivery, also configure `RESEND_API_KEY` and
+   `RESEND_FROM` in the API project's environment settings. Verify the sender
+   domain/address in Resend before using it.
 
    Set variables for the Vercel environments you deploy (Production, Preview,
    and Development as applicable). The API allows one exact frontend origin,

@@ -23,11 +23,11 @@ is not a proposal for endpoints that do not yet exist.
 - The backend reads `MONGODB_URI`, `FRONTEND_ORIGIN`, `JWT_SECRET`, and
   optional `PORT` and `AUTH_COOKIE_SAME_SITE` from its environment. `PORT`
   defaults to `5000`; cookie SameSite defaults to `Lax`.
-- Email verification requires `SMTP_HOST`, `SMTP_PORT`, `SMTP_SECURE`,
-  `SMTP_USER`, `SMTP_PASS`, and `SMTP_FROM`; configure all six together in the
-  backend environment. When SMTP is not configured, registration, login, and
-  resend return `503 EMAIL_SERVICE_UNAVAILABLE`. SMTP credentials are never
-  frontend configuration.
+- Email verification requires `RESEND_API_KEY` and `RESEND_FROM`; configure
+  both together in the backend environment. When Resend is not configured,
+  registration, login, and resend return `503 EMAIL_SERVICE_UNAVAILABLE`.
+  Keep the Resend API key out of frontend configuration. Resend API errors are
+  not returned to clients.
 - The frontend API uses `NEXT_PUBLIC_API_URL`, defaulting to
   `http://localhost:5000` in development. Production requires this variable
   and an HTTPS URL.

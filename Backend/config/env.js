@@ -59,64 +59,35 @@ if (Buffer.byteLength(jwtSecret, 'utf8') < 32) {
   throw new Error('JWT_SECRET must be at least 32 bytes long');
 }
 
-const smtpVariableNames = [
-  'SMTP_HOST',
-  'SMTP_PORT',
-  'SMTP_SECURE',
-  'SMTP_USER',
-  'SMTP_PASS',
-  'SMTP_FROM',
-];
-const smtpValues = Object.fromEntries(
-  smtpVariableNames.map((name) => [name, process.env[name]?.trim() || '']),
+const resendVariableNames = ['RESEND_API_KEY', 'RESEND_FROM'];
+const resendValues = Object.fromEntries(
+  resendVariableNames.map((name) => [name, process.env[name]?.trim() || '']),
 );
-const hasSmtpConfiguration = smtpVariableNames.some((name) => smtpValues[name]);
-let smtp = null;
+const hasResendConfiguration = resendVariableNames.some((name) => resendValues[name]);
+let resend = null;
 
-if (hasSmtpConfiguration) {
-  const missingSmtpVariables = smtpVariableNames.filter((name) => !smtpValues[name]);
-  if (missingSmtpVariables.length > 0) {
+if (hasResendConfiguration) {
+  const missingResendVariables = resendVariableNames.filter((name) => !resendValues[name]);
+  if (missingResendVariables.length > 0) {
     throw new Error(
-      `Incomplete SMTP configuration; set all of: ${smtpVariableNames.join(', ')}`,
+      `Incomplete Resend configuration; set both: ${resendVariableNames.join(', ')}`,
     );
   }
 
-  const smtpPort = Number(smtpValues.SMTP_PORT);
-  if (
-    !/^\d+$/.test(smtpValues.SMTP_PORT) ||
-    !Number.isInteger(smtpPort) ||
-    smtpPort < 1 ||
-    smtpPort > 65535
-  ) {
-    throw new Error('SMTP_PORT must be an integer between 1 and 65535');
-  }
-
-  if (/[\s/\\@]/.test(smtpValues.SMTP_HOST)) {
-    throw new Error('SMTP_HOST must be a hostname');
-  }
-
-  if (!/^(?:true|false)$/i.test(smtpValues.SMTP_SECURE)) {
-    throw new Error('SMTP_SECURE must be true or false');
-  }
-
-  const smtpFromAddress = smtpValues.SMTP_FROM.replace(
+  const resendFromAddress = resendValues.RESEND_FROM.replace(
     /^[^<>\r\n]*<([^<>]+)>$/,
     '$1',
   );
   if (
-    /[\r\n]/.test(smtpValues.SMTP_FROM) ||
-    !/^[^<>\s@]+@[^<>\s@]+\.[^<>\s@]+$/.test(smtpFromAddress)
+    /[\r\n]/.test(resendValues.RESEND_FROM) ||
+    !/^[^<>\s@]+@[^<>\s@]+\.[^<>\s@]+$/.test(resendFromAddress)
   ) {
-    throw new Error('SMTP_FROM must contain a valid email address');
+    throw new Error('RESEND_FROM must contain a valid email address');
   }
 
-  smtp = Object.freeze({
-    host: smtpValues.SMTP_HOST,
-    port: smtpPort,
-    secure: smtpValues.SMTP_SECURE.toLowerCase() === 'true',
-    user: smtpValues.SMTP_USER,
-    pass: smtpValues.SMTP_PASS,
-    from: smtpValues.SMTP_FROM,
+  resend = Object.freeze({
+    apiKey: resendValues.RESEND_API_KEY,
+    from: resendValues.RESEND_FROM,
   });
 }
 
@@ -133,5 +104,5 @@ module.exports = Object.freeze({
   authCookieSameSite,
   authCookieSecure: isProduction,
   jwtSecret,
-  smtp,
+  resend,
 });

@@ -5,81 +5,88 @@ const {
   createEmailService,
 } = require('../services/emailService');
 
-const smtpConfig = {
-  host: 'smtp.example.com',
-  port: 587,
-  secure: false,
-  user: 'test-user',
-  pass: 'test-password',
+const resendConfig = {
+  apiKey: 're_test_api_key',
   from: 'FleetCare <no-reply@example.com>',
 };
 
-test('email service verifies and reuses a mocked SMTP transport', async () => {
+test('email service sends the existing OTP template with Resend', async () => {
   const sentMessages = [];
-  let transportOptions;
-  let verificationCount = 0;
-  const service = createEmailService(smtpConfig, (options) => {
-    transportOptions = options;
+  let apiKey;
+  const service = createEmailService(resendConfig, (configuredApiKey) => {
+    apiKey = configuredApiKey;
     return {
-      async verify() {
-        verificationCount += 1;
-      },
-      async sendMail(message) {
-        sentMessages.push(message);
+      emails: {
+        async send(message) {
+          sentMessages.push(message);
+          return { data: { id: 'email_test_id' }, error: null };
+        },
       },
     };
   });
 
-  await service.verifySmtpConnection();
   await service.sendOtpVerificationEmail('driver@example.com', '012345');
 
-  assert.equal(verificationCount, 1);
-  assert.deepEqual(transportOptions, {
-    host: smtpConfig.host,
-    port: smtpConfig.port,
-    secure: smtpConfig.secure,
-    auth: { user: smtpConfig.user, pass: smtpConfig.pass },
-  });
+  assert.equal(apiKey, resendConfig.apiKey);
   assert.equal(sentMessages.length, 1);
   assert.equal(sentMessages[0].to, 'driver@example.com');
-  assert.equal(sentMessages[0].from, smtpConfig.from);
+  assert.equal(sentMessages[0].from, resendConfig.from);
+  assert.equal(sentMessages[0].subject, 'Your FleetCare verification code');
   assert.match(sentMessages[0].text, /012345/);
   assert.match(sentMessages[0].html, /012345/);
 });
 
-test('email delivery failures are replaced with a safe error', async () => {
-  const service = createEmailService(smtpConfig, () => ({
-    async verify() {
-      throw new Error('private SMTP credential detail');
-    },
-    async sendMail() {
-      throw new Error('private SMTP credential detail and OTP 012345');
+test('Resend API failures are replaced with a safe error', async () => {
+  const service = createEmailService(resendConfig, () => ({
+    emails: {
+      async send() {
+        return {
+          data: null,
+          error: new Error('private API key detail and OTP 012345'),
+        };
+      },
     },
   }));
 
-  await assert.rejects(service.verifySmtpConnection(), {
-    message: 'Unable to verify the SMTP connection',
-  });
   await assert.rejects(
     service.sendOtpVerificationEmail('driver@example.com', '012345'),
     (error) => {
       assert.ok(error instanceof EmailDeliveryError);
       assert.equal(error.message.includes('012345'), false);
-      assert.equal(error.message.includes('credential'), false);
+      assert.equal(error.message.includes('API key'), false);
       return true;
     },
   );
 });
 
-test('email service does not construct a transport when SMTP is unavailable', async () => {
+test('thrown Resend errors are replaced with a safe error', async () => {
+  const service = createEmailService(resendConfig, () => ({
+    emails: {
+      async send() {
+        throw new Error('private API key detail and OTP 012345');
+      },
+    },
+  }));
+
+  await assert.rejects(
+    service.sendOtpVerificationEmail('driver@example.com', '012345'),
+    (error) => {
+      assert.ok(error instanceof EmailDeliveryError);
+      assert.equal(error.message.includes('012345'), false);
+      assert.equal(error.message.includes('API key'), false);
+      return true;
+    },
+  );
+});
+
+test('email service reports unavailable when Resend is not configured', async () => {
   const service = createEmailService(null, () => {
-    throw new Error('A transport must not be constructed');
+    throw new Error('A Resend client must not be constructed');
   });
 
-  await assert.rejects(service.verifySmtpConnection(), {
-    message: 'Unable to verify the SMTP connection',
-  });
-  await assert.rejects(service.sendOtpVerificationEmail('driver@example.com', '012345'), {
-    message: 'Unable to deliver the verification email',
-  });
+  await assert.rejects(
+    service.sendOtpVerificationEmail('driver@example.com', '012345'),
+    { message: 'Unable to deliver the verification email' },
+  );
+  assert.equal(service.isConfigured, false);
 });

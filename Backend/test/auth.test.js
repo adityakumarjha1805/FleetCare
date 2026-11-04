@@ -235,12 +235,12 @@ test('login rejects an incorrect password and unknown account with the same gene
   assertNoAuthCookie(unknownAccount.response);
 });
 
-test('registration and login return service unavailable before work when SMTP is not configured', async () => {
+test('registration and login return service unavailable before work when Resend is not configured', async () => {
   emailService.isConfigured = false;
   try {
     const loginResponse = await login('manager@example.com');
     const registration = await register(
-      'smtp-unavailable@example.com',
+      'resend-unavailable@example.com',
       'New Driver',
     );
 
@@ -254,7 +254,7 @@ test('registration and login return service unavailable before work when SMTP is
       code: 'EMAIL_SERVICE_UNAVAILABLE',
       message: 'Email verification is temporarily unavailable. Please try again later.',
     });
-    assert.equal(users.has('smtp-unavailable@example.com'), false);
+    assert.equal(users.has('resend-unavailable@example.com'), false);
   } finally {
     emailService.isConfigured = true;
   }

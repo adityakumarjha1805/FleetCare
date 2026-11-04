@@ -7,6 +7,8 @@ import { ApiError } from "../lib/api-client";
 import { loginUser, registerUser } from "../lib/auth-api";
 
 const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+const PENDING_CHALLENGE_KEY = "fleetcare.pendingEmailVerification";
+const RESEND_COOLDOWN_MS = 60 * 1000;
 
 function passwordByteLength(value) {
   return new TextEncoder().encode(value).length;
@@ -22,14 +24,12 @@ export default function AuthPage({ mode }) {
     confirmPassword: "",
   });
   const [error, setError] = useState("");
-  const [success, setSuccess] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   function updateField(event) {
     const { name, value } = event.target;
     setValues((current) => ({ ...current, [name]: value }));
     setError("");
-    setSuccess("");
   }
 
   function validate() {
@@ -64,27 +64,34 @@ export default function AuthPage({ mode }) {
 
     setIsSubmitting(true);
     setError("");
-    setSuccess("");
     try {
+      let challenge;
       if (isSignup) {
-        await registerUser({
+        challenge = await registerUser({
           name: values.name.trim(),
           email: values.email.trim().toLowerCase(),
           password: values.password,
         });
-        setSuccess("Account created. Signing you in…");
+      } else {
+        challenge = await loginUser({
+          email: values.email.trim().toLowerCase(),
+          password: values.password,
+        });
       }
 
-      await loginUser({
-        email: values.email.trim().toLowerCase(),
-        password: values.password,
-      });
-      router.replace("/");
+      sessionStorage.setItem(
+        PENDING_CHALLENGE_KEY,
+        JSON.stringify({
+          challengeId: challenge.challengeId,
+          resendAvailableAt: Date.now() + RESEND_COOLDOWN_MS,
+        }),
+      );
+      router.push("/verify-email");
     } catch (requestError) {
       setError(
         requestError instanceof ApiError
           ? requestError.message
-          : "Unable to sign in. Please try again.",
+          : "Unable to continue. Please try again.",
       );
     } finally {
       setIsSubmitting(false);
@@ -129,12 +136,6 @@ export default function AuthPage({ mode }) {
             {error}
           </p>
         )}
-        {success && (
-          <p className="auth-message auth-success" role="status" aria-live="polite">
-            {success}
-          </p>
-        )}
-
         <form className="auth-form" onSubmit={handleSubmit} noValidate>
           {isSignup && (
             <div className="auth-field">

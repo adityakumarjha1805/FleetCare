@@ -5,6 +5,7 @@ const { after, before, test } = require('node:test');
 process.env.JWT_SECRET = 'fleetcare-rate-limit-tests-use-a-32-byte-secret';
 
 const authRouter = require('../routes/auth');
+const config = require('../config/env');
 const { createAuthRateLimiter } = require('../middleware/authRateLimit');
 
 const app = express();
@@ -64,7 +65,10 @@ function makeRequest(ip = '127.0.0.1') {
 async function post(path, body) {
   return fetch(`${baseUrl}/${path}`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: {
+      'Content-Type': 'application/json',
+      Origin: config.frontendOrigin,
+    },
     body: JSON.stringify(body),
   });
 }
@@ -97,6 +101,15 @@ test('login endpoint returns 429 after its per-IP limit', async () => {
   }
 
   await assertRateLimited(await post('login', {}));
+});
+
+test('OTP resend endpoint returns 429 after its per-IP limit', async () => {
+  for (let attempt = 0; attempt < 10; attempt += 1) {
+    const response = await post('resend-otp', {});
+    assert.equal(response.status, 400);
+  }
+
+  await assertRateLimited(await post('resend-otp', {}));
 });
 
 test('authentication rate limiter returns a structured 429 and allows requests after the window', () => {

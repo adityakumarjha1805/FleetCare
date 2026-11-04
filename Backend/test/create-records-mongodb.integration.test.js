@@ -46,6 +46,7 @@ before(async () => {
     name: 'FleetCare create integration test',
     email: `create-integration-${suffix}@example.invalid`,
     password: 'TemporaryIntegration123',
+    emailVerified: true,
   });
   vehicle = await Vehicle.create({
     vehicleName: 'Create integration test vehicle',

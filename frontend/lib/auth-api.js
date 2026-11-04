@@ -34,10 +34,12 @@ async function requestAuth(path, body) {
   }
 
   if (!response.ok || payload?.success !== true) {
+    const retryAfter = Number(response.headers.get("Retry-After"));
     throw new ApiError(
       payload?.error?.message || "Unable to complete the request.",
       response.status,
       payload?.error?.code || "REQUEST_FAILED",
+      Number.isFinite(retryAfter) && retryAfter > 0 ? retryAfter : null,
     );
   }
 
@@ -61,14 +63,47 @@ function assertUser(user) {
   return user;
 }
 
+function assertVerificationChallenge(data) {
+  if (
+    !data ||
+    data.verificationRequired !== true ||
+    typeof data.challengeId !== "string" ||
+    !/^[A-Za-z0-9_-]{43}$/.test(data.challengeId)
+  ) {
+    throw new ApiError(
+      "The server returned an invalid verification challenge.",
+      502,
+      "INVALID_RESPONSE",
+    );
+  }
+  return data;
+}
+
 export async function registerUser({ name, email, password }) {
   const data = await requestAuth("register", { name, email, password });
-  return assertUser(data?.user);
+  return assertVerificationChallenge(data);
 }
 
 export async function loginUser({ email, password }) {
   const data = await requestAuth("login", { email, password });
+  return assertVerificationChallenge(data);
+}
+
+export async function verifyEmailOtp({ challengeId, otp }) {
+  const data = await requestAuth("verify-otp", { challengeId, otp });
   return assertUser(data?.user);
+}
+
+export async function resendEmailOtp(challengeId) {
+  const data = await requestAuth("resend-otp", { challengeId });
+  if (!data || data.verificationRequired !== true) {
+    throw new ApiError(
+      "The server returned an invalid resend response.",
+      502,
+      "INVALID_RESPONSE",
+    );
+  }
+  return data;
 }
 
 export async function fetchCurrentUser() {

@@ -86,7 +86,7 @@ async function authenticate(req, res, next) {
 
   try {
     const user = await User.findById(payload.sub);
-    if (!user) {
+    if (!user || user.emailVerified !== true) {
       return unauthorized(res, 'Invalid or expired authentication token');
     }
 

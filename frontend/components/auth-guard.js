@@ -5,7 +5,7 @@ import { useEffect, useState } from "react";
 import { fetchCurrentUser } from "../lib/auth-api";
 import Link from "next/link";
 
-const publicPaths = new Set(["/login", "/signup"]);
+const publicPaths = new Set(["/login", "/signup", "/verify-email"]);
 
 export default function AuthGuard({ children }) {
   const pathname = usePathname();

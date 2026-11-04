@@ -45,6 +45,13 @@ Set these variables in `Backend\.env`:
 `Backend\.env.example` provides placeholders for local development. Do not
 commit `.env` or put secrets in frontend variables.
 
+The backend email service requires `SMTP_HOST`, `SMTP_PORT`, `SMTP_SECURE`,
+`SMTP_USER`, `SMTP_PASS`, and `SMTP_FROM` together. Registration and login
+send email verification codes; configure these SMTP settings in the backend
+environment only. Without them, the auth endpoints return a clear
+`503 EMAIL_SERVICE_UNAVAILABLE` response rather than attempting an incomplete
+login or registration.
+
 ### Frontend
 
 In a second terminal, from the repository root:
@@ -60,12 +67,55 @@ The frontend is served at `http://localhost:3000`. In development,
 this variable to be set to an HTTPS API URL at build time. It is public client
 configuration, not a place for secrets.
 
+## Deploying on Vercel
+
+Deploy the frontend and API as **two Vercel projects** from the same
+repository:
+
+1. Import the repository for the frontend and set **Root Directory** to
+   `frontend`. Use the Next.js framework preset and add
+   `NEXT_PUBLIC_API_URL` as an environment variable for each environment. Its
+   value is the API project's HTTPS origin only (for example,
+   `https://fleetcare-api.vercel.app`), without a trailing slash or `/api`.
+2. Import the repository again for the API and set **Root Directory** to
+   `Backend`. Vercel deploys `api/[...path].js` as the Express API's
+   serverless entry point.
+3. Configure these API project environment variables:
+
+   | Variable | Value |
+   |---|---|
+   | `MONGODB_URI` | A MongoDB Atlas connection string with TLS enabled |
+   | `FRONTEND_ORIGIN` | The exact HTTPS origin of the frontend, with no path or trailing slash |
+   | `JWT_SECRET` | A unique random secret of at least 32 bytes |
+   | `AUTH_COOKIE_SAME_SITE` | `None` for the separately hosted frontend and API |
+
+   To enable backend email delivery, also configure `SMTP_HOST`, `SMTP_PORT`,
+   `SMTP_SECURE`, `SMTP_USER`, `SMTP_PASS`, and `SMTP_FROM` in the API
+   project's environment settings.
+
+   Set variables for the Vercel environments you deploy (Production, Preview,
+   and Development as applicable). The API allows one exact frontend origin,
+   so use a stable custom or branch domain for previews and configure the
+   matching frontend origin and API URL in that environment; per-commit
+   preview URLs need a matching API origin before browser authentication will
+   work. Keep secrets in Vercel's environment settings, not in
+   `NEXT_PUBLIC_*` variables.
+4. Allow the API deployment to connect to your MongoDB Atlas cluster, then
+   deploy the API and set its URL as the frontend's `NEXT_PUBLIC_API_URL`.
+   Check `https://<api-domain>/api/health`; a healthy deployment returns
+   `{"success":true,"data":{"status":"ok","database":{"connected":true}}}`.
+
+The API uses in-memory authentication rate-limit counters, which are not
+shared across serverless instances. Use a shared rate-limit store before
+relying on those limits across multiple instances.
+
 ## Implemented workflows
 
-- **Authentication:** `/signup` registers an account and then signs in;
-  `/login` signs in. Protected pages check the session through `/api/auth/me`.
-  The JWT is stored in an HttpOnly cookie, inaccessible to frontend
-  JavaScript. Sign out clears the cookie; there is no server-side token
+- **Authentication:** registration and password login start email OTP
+  verification. `POST /api/auth/verify-otp` sets an HttpOnly JWT cookie only
+  after a valid code; protected APIs reject unverified accounts. The frontend
+  collects and submits the OTP, and protected pages check the session through
+  `/api/auth/me`. Sign out clears the cookie; there is no server-side token
   revocation endpoint, so a copied JWT remains valid until expiry.
 - **Vehicles:** authenticated users can create and list their own vehicle
   records persisted in MongoDB. The backend also has vehicle detail, update,

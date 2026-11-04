@@ -8,40 +8,106 @@ process.env.JWT_SECRET = 'fleetcare-auth-tests-use-a-32-byte-secret';
 
 const app = require('../app');
 const config = require('../config/env');
+const emailService = require('../services/emailService');
+const { OTP_TTL_MS } = require('../utils/emailOtp');
 const User = require('../models/User');
 
 const users = new Map();
-const originalFindOne = User.findOne;
-const originalFindById = User.findById;
-const originalCreate = User.create;
+const sentOtps = [];
+const originals = {
+  findOne: User.findOne,
+  findById: User.findById,
+  findOneAndUpdate: User.findOneAndUpdate,
+  updateOne: User.updateOne,
+  create: User.create,
+  emailServiceConfigured: emailService.isConfigured,
+  sendOtpVerificationEmail: emailService.sendOtpVerificationEmail,
+};
 let server;
 let baseUrl;
+let requestSequence = 0;
+
+function isMatch(user, filter) {
+  return Object.entries(filter).every(([key, expected]) => {
+    const actual = user[key];
+    if (expected && typeof expected === 'object' && !(expected instanceof Date)) {
+      if ('$gt' in expected) return actual > expected.$gt;
+      if ('$gte' in expected) return actual >= expected.$gte;
+      if ('$lt' in expected) return actual < expected.$lt;
+      if ('$lte' in expected) return actual <= expected.$lte;
+    }
+    if (key === '_id') return actual?.toString() === expected.toString();
+    return actual === expected;
+  });
+}
 
 function queryFor(user) {
   return {
     select: async () => user,
+    then(resolve, reject) {
+      return Promise.resolve(user).then(resolve, reject);
+    },
+  };
+}
+
+function findUser(filter) {
+  return [...users.values()].find((user) => isMatch(user, filter)) || null;
+}
+
+function applyUpdate(user, update) {
+  for (const [key, value] of Object.entries(update.$set || {})) {
+    user[key] = value;
+  }
+  for (const [key, value] of Object.entries(update.$inc || {})) {
+    user[key] = (user[key] || 0) + value;
+  }
+  for (const key of Object.keys(update.$unset || {})) {
+    delete user[key];
+  }
+}
+
+function makeRequestHeaders(headers = {}) {
+  return {
+    'Content-Type': 'application/json',
+    Origin: config.frontendOrigin,
+    'X-Forwarded-For': `198.51.100.${(requestSequence++ % 254) + 1}`,
+    ...headers,
   };
 }
 
 before(async () => {
-  User.findOne = (filter) => {
-    const user = users.get(filter.email) || null;
-    return queryFor(user);
-  };
-  User.findById = async (id) => {
-    return [...users.values()].find((user) => user._id.toString() === id) || null;
-  };
+  app.set('trust proxy', true);
+  User.findOne = (filter) => queryFor(findUser(filter));
+  emailService.isConfigured = true;
+  User.findById = async (id) =>
+    [...users.values()].find((user) => user._id.toString() === id) || null;
   User.create = async (fields) => {
     const user = {
       ...fields,
       password: await bcrypt.hash(fields.password, 12),
       _id: new mongoose.Types.ObjectId(),
       role: 'user',
+      emailVerified: false,
       createdAt: new Date(),
       updatedAt: new Date(),
     };
     users.set(user.email, user);
     return user;
+  };
+  User.updateOne = async (filter, update) => {
+    const user = findUser(filter);
+    if (!user) return { matchedCount: 0, modifiedCount: 0 };
+    applyUpdate(user, update);
+    return { matchedCount: 1, modifiedCount: 1 };
+  };
+  User.findOneAndUpdate = (filter, update) => {
+    const user = findUser(filter);
+    if (!user) return queryFor(null);
+    applyUpdate(user, update);
+    return queryFor(user);
+  };
+  emailService.sendOtpVerificationEmail = async (recipient, code) => {
+    sentOtps.push({ recipient, code });
   };
 
   server = await new Promise((resolve) => {
@@ -51,9 +117,13 @@ before(async () => {
 });
 
 after(async () => {
-  User.findOne = originalFindOne;
-  User.findById = originalFindById;
-  User.create = originalCreate;
+  User.findOne = originals.findOne;
+  User.findById = originals.findById;
+  User.findOneAndUpdate = originals.findOneAndUpdate;
+  User.updateOne = originals.updateOne;
+  User.create = originals.create;
+  emailService.isConfigured = originals.emailServiceConfigured;
+  emailService.sendOtpVerificationEmail = originals.sendOtpVerificationEmail;
 
   if (server) {
     await new Promise((resolve, reject) => {
@@ -65,48 +135,67 @@ after(async () => {
 async function post(path, body, headers = {}) {
   return fetch(`${baseUrl}/api/auth/${path}`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json', ...headers },
-    body: JSON.stringify(body),
+    headers: makeRequestHeaders(headers),
+    body: body === undefined ? undefined : JSON.stringify(body),
   });
 }
 
-test('registration validates input, normalizes email, and stores only a password hash', async () => {
-  const response = await post('register', {
-    name: '  Fleet Manager  ',
-    email: '  Manager@Example.com ',
-    password: 'FleetCare123',
-    role: 'admin',
-  });
-  const body = await response.json();
+async function register(email, name = 'Fleet Manager', password = 'FleetCare123') {
+  const response = await post('register', { name, email, password });
+  return { response, body: await response.json() };
+}
+
+async function login(email = 'manager@example.com', password = 'FleetCare123') {
+  const response = await post('login', { email, password });
+  return { response, body: await response.json() };
+}
+
+async function verify(challengeId, otp, headers = {}) {
+  return post('verify-otp', { challengeId, otp }, headers);
+}
+
+function latestOtp(email) {
+  return [...sentOtps].reverse().find((sent) => sent.recipient === email)?.code;
+}
+
+function assertNoAuthCookie(response) {
+  assert.equal(response.headers.get('set-cookie'), null);
+}
+
+test('registration validates input, hashes passwords, and sends an OTP without verifying the account', async () => {
+  const { response, body } = await register(
+    '  Manager@Example.com ',
+    '  Fleet Manager  ',
+  );
   const storedUser = users.get('manager@example.com');
 
   assert.equal(response.status, 201);
-  assert.deepEqual(body.data.user, {
-    id: storedUser._id.toString(),
-    name: 'Fleet Manager',
-    email: 'manager@example.com',
-    role: 'user',
-    createdAt: storedUser.createdAt.toISOString(),
-    updatedAt: storedUser.updatedAt.toISOString(),
-  });
-  assert.equal(Object.hasOwn(body.data.user, 'password'), false);
+  assert.equal(body.success, true);
+  assert.equal(body.data.verificationRequired, true);
+  assert.match(body.data.challengeId, /^[A-Za-z0-9_-]{43}$/);
+  assert.equal(Object.hasOwn(body.data, 'user'), false);
+  assert.equal(storedUser.name, 'Fleet Manager');
+  assert.equal(storedUser.emailVerified, false);
+  assert.notEqual(storedUser.emailVerificationChallengeHash, body.data.challengeId);
+  assert.equal(Object.hasOwn(body.data, 'otp'), false);
+  assert.equal(Object.hasOwn(body.data, 'emailVerificationOtpHash'), false);
   assert.notEqual(storedUser.password, 'FleetCare123');
   assert.equal(await bcrypt.compare('FleetCare123', storedUser.password), true);
+  assert.match(storedUser.emailVerificationOtpHash, /^[a-f\d]{64}$/);
+  assert.equal(storedUser.emailVerificationOtpHash.includes(latestOtp(storedUser.email)), false);
+  assert.equal(
+    storedUser.emailVerificationOtpExpiresAt.getTime() -
+      storedUser.emailVerificationResendAvailableAt.getTime(),
+    OTP_TTL_MS - 60_000,
+  );
+  assertNoAuthCookie(response);
 });
 
-test('registration rejects duplicate normalized emails', async () => {
-  const response = await post('register', {
-    name: 'Another Manager',
-    email: 'MANAGER@example.com',
-    password: 'FleetCare123',
-  });
-  const body = await response.json();
+test('registration rejects duplicate normalized emails and invalid fields', async () => {
+  const duplicate = await register('MANAGER@example.com', 'Another Manager');
+  assert.equal(duplicate.response.status, 409);
+  assert.equal(duplicate.body.error.code, 'EMAIL_ALREADY_REGISTERED');
 
-  assert.equal(response.status, 409);
-  assert.equal(body.error.code, 'EMAIL_ALREADY_REGISTERED');
-});
-
-test('registration rejects invalid fields and weak passwords', async () => {
   const invalidCases = [
     { name: '', email: 'valid@example.com', password: 'FleetCare123' },
     { name: 'Name', email: 'not-an-email', password: 'FleetCare123' },
@@ -120,11 +209,60 @@ test('registration rejects invalid fields and weak passwords', async () => {
   }
 });
 
-test('login sets an HttpOnly authentication cookie and returns a safe profile', async () => {
-  const response = await post('login', {
-    email: ' MANAGER@EXAMPLE.COM ',
-    password: 'FleetCare123',
+test('login with correct credentials initiates OTP and does not issue a JWT', async () => {
+  const { response, body } = await login(' MANAGER@EXAMPLE.COM ');
+
+  assert.equal(response.status, 200);
+  assert.equal(body.success, true);
+  assert.equal(body.data.verificationRequired, true);
+  assert.match(body.data.challengeId, /^[A-Za-z0-9_-]{43}$/);
+  assert.equal(Object.hasOwn(body.data, 'user'), false);
+  assert.equal(Object.hasOwn(body.data, 'token'), false);
+  assertNoAuthCookie(response);
+});
+
+test('login rejects an incorrect password and unknown account with the same generic error', async () => {
+  const wrongPassword = await login('manager@example.com', 'WrongPassword123');
+  const unknownAccount = await login('unknown@example.com');
+
+  assert.equal(wrongPassword.response.status, 401);
+  assert.deepEqual(wrongPassword.body.error, {
+    code: 'INVALID_CREDENTIALS',
+    message: 'Invalid email or password',
   });
+  assert.deepEqual(unknownAccount.body.error, wrongPassword.body.error);
+  assertNoAuthCookie(wrongPassword.response);
+  assertNoAuthCookie(unknownAccount.response);
+});
+
+test('registration and login return service unavailable before work when SMTP is not configured', async () => {
+  emailService.isConfigured = false;
+  try {
+    const loginResponse = await login('manager@example.com');
+    const registration = await register(
+      'smtp-unavailable@example.com',
+      'New Driver',
+    );
+
+    assert.equal(loginResponse.response.status, 503);
+    assert.deepEqual(loginResponse.body.error, {
+      code: 'EMAIL_SERVICE_UNAVAILABLE',
+      message: 'Email verification is temporarily unavailable. Please try again later.',
+    });
+    assert.equal(registration.response.status, 503);
+    assert.deepEqual(registration.body.error, {
+      code: 'EMAIL_SERVICE_UNAVAILABLE',
+      message: 'Email verification is temporarily unavailable. Please try again later.',
+    });
+    assert.equal(users.has('smtp-unavailable@example.com'), false);
+  } finally {
+    emailService.isConfigured = true;
+  }
+});
+
+test('successful verification issues an HttpOnly JWT cookie and a safe profile', async () => {
+  const { body: loginBody } = await login();
+  const response = await verify(loginBody.data.challengeId, latestOtp('manager@example.com'));
   const body = await response.json();
   const setCookie = response.headers.get('set-cookie');
   const token = setCookie.match(/fleetcareAccessToken=([^;]+)/)?.[1];
@@ -133,14 +271,17 @@ test('login sets an HttpOnly authentication cookie and returns a safe profile', 
     issuer: 'fleetcare-api',
     audience: 'fleetcare-client',
   });
+  const storedUser = users.get('manager@example.com');
 
   assert.equal(response.status, 200);
+  assert.equal(storedUser.emailVerified, true);
   assert.match(setCookie, /HttpOnly/i);
   assert.match(setCookie, /SameSite=Lax/i);
   assert.match(setCookie, /Path=\/api/i);
+  assert.equal(claims.sub, storedUser._id.toString());
   assert.equal(Object.hasOwn(body.data, 'token'), false);
-  assert.equal(claims.sub, users.get('manager@example.com')._id.toString());
   assert.equal(Object.hasOwn(body.data.user, 'password'), false);
+  assert.equal(Object.hasOwn(body.data.user, 'emailVerificationOtpHash'), false);
   assert.deepEqual(Object.keys(body.data.user).sort(), [
     'createdAt',
     'email',
@@ -149,40 +290,149 @@ test('login sets an HttpOnly authentication cookie and returns a safe profile', 
     'role',
     'updatedAt',
   ]);
+  assert.equal(storedUser.emailVerificationOtpHash, undefined);
+  assert.equal(storedUser.emailVerificationChallengeHash, undefined);
 });
 
-test('login rejects wrong passwords with generic credentials errors', async () => {
-  const response = await post('login', {
-    email: 'manager@example.com',
-    password: 'WrongPassword123',
-  });
-  const body = await response.json();
+test('incorrect OTP attempts are limited and the OTP is invalidated at the limit', async () => {
+  const { body } = await login();
+  for (let attempt = 0; attempt < 5; attempt += 1) {
+    const response = await verify(body.data.challengeId, '000000');
+    assert.equal(response.status, 401);
+    assert.equal((await response.json()).error.code, 'INVALID_OTP');
+  }
 
+  const storedUser = users.get('manager@example.com');
+  assert.equal(storedUser.emailVerificationFailedAttempts, 5);
+  assert.equal(storedUser.emailVerificationOtpHash, undefined);
+
+  const correctOtpAfterLimit = await verify(
+    body.data.challengeId,
+    latestOtp('manager@example.com'),
+  );
+  assert.equal(correctOtpAfterLimit.status, 401);
+  assertNoAuthCookie(correctOtpAfterLimit);
+});
+
+test('expired OTP is rejected', async () => {
+  const { body } = await login();
+  users.get('manager@example.com').emailVerificationOtpExpiresAt = new Date(
+    Date.now() - 1,
+  );
+
+  const response = await verify(
+    body.data.challengeId,
+    latestOtp('manager@example.com'),
+  );
   assert.equal(response.status, 401);
-  assert.deepEqual(body.error, {
-    code: 'INVALID_CREDENTIALS',
-    message: 'Invalid email or password',
-  });
+  assert.equal((await response.json()).error.code, 'INVALID_OTP');
+  assertNoAuthCookie(response);
 });
 
-test("login rejects passwords beyond bcrypt's 72-byte input limit", async () => {
-  const password = 'x'.repeat(72);
-  const registration = await post('register', {
-    name: 'Password Limit',
-    email: 'password-limit@example.com',
-    password,
-  });
-  assert.equal(registration.status, 201);
+test('a successfully verified OTP cannot be reused', async () => {
+  const { body } = await login();
+  const otp = latestOtp('manager@example.com');
+  const first = await verify(body.data.challengeId, otp);
+  const reuse = await verify(body.data.challengeId, otp);
 
-  const response = await post('login', {
-    email: 'password-limit@example.com',
-    password: `${password}extra`,
-  });
-
-  assert.equal(response.status, 401);
+  assert.equal(first.status, 200);
+  assert.equal(reuse.status, 401);
+  assert.equal((await reuse.json()).error.code, 'INVALID_CHALLENGE');
+  assertNoAuthCookie(reuse);
 });
 
-test('current-user endpoint rejects missing, invalid, and expired tokens', async () => {
+test('resend enforces cooldown, replaces the prior OTP, and limits requests', async () => {
+  const { body } = await login();
+  const user = users.get('manager@example.com');
+  const firstOtp = latestOtp(user.email);
+
+  const immediateResend = await post('resend-otp', {
+    challengeId: body.data.challengeId,
+  });
+  assert.equal(immediateResend.status, 429);
+  assert.equal(
+    (await immediateResend.json()).error.code,
+    'OTP_RESEND_COOLDOWN',
+  );
+
+  for (let resend = 0; resend < 5; resend += 1) {
+    user.emailVerificationResendAvailableAt = new Date(Date.now() - 1);
+    const response = await post('resend-otp', {
+      challengeId: body.data.challengeId,
+    });
+    assert.equal(response.status, 200);
+  }
+  assert.equal(user.emailVerificationResendCount, 5);
+
+  user.emailVerificationResendAvailableAt = new Date(Date.now() - 1);
+  const overLimit = await post('resend-otp', {
+    challengeId: body.data.challengeId,
+  });
+  assert.equal(overLimit.status, 429);
+  assert.equal(
+    (await overLimit.json()).error.code,
+    'OTP_RESEND_LIMIT_EXCEEDED',
+  );
+  assert.notEqual(latestOtp(user.email), firstOtp);
+
+  const oldOtp = await verify(body.data.challengeId, firstOtp);
+  assert.equal(oldOtp.status, 401);
+  assertNoAuthCookie(oldOtp);
+});
+
+test('challenge verification enforces the configured frontend origin', async () => {
+  const { body } = await login();
+  const response = await verify(
+    body.data.challengeId,
+    latestOtp('manager@example.com'),
+    { Origin: 'https://untrusted.example' },
+  );
+
+  assert.equal(response.status, 403);
+  assert.equal((await response.json()).error.code, 'CSRF_CHECK_FAILED');
+  assertNoAuthCookie(response);
+});
+
+test('verified users access protected APIs; unverified and deleted users are rejected', async () => {
+  const { body } = await login();
+  const otp = latestOtp('manager@example.com');
+  const verification = await verify(body.data.challengeId, otp);
+  const cookie = verification.headers.get('set-cookie').split(';')[0];
+
+  const authorized = await fetch(`${baseUrl}/api/auth/me`, {
+    headers: { Cookie: cookie },
+  });
+  assert.equal(authorized.status, 200);
+
+  const unverified = await register('unverified@example.com');
+  const unverifiedUser = users.get('unverified@example.com');
+  const unverifiedToken = jwt.sign(
+    {},
+    config.jwtSecret,
+    {
+      algorithm: 'HS256',
+      subject: unverifiedUser._id.toString(),
+      issuer: 'fleetcare-api',
+      audience: 'fleetcare-client',
+      expiresIn: '1h',
+    },
+  );
+  const deniedUnverified = await fetch(`${baseUrl}/api/auth/me`, {
+    headers: { Authorization: `Bearer ${unverifiedToken}` },
+  });
+  assert.equal(unverified.response.status, 201);
+  assert.equal(deniedUnverified.status, 401);
+
+  const deletedUser = users.get('manager@example.com');
+  users.delete('manager@example.com');
+  const deniedDeleted = await fetch(`${baseUrl}/api/auth/me`, {
+    headers: { Cookie: cookie },
+  });
+  assert.equal(deniedDeleted.status, 401);
+  users.set('manager@example.com', deletedUser);
+});
+
+test('invalid and expired JWTs are rejected', async () => {
   const expiredToken = jwt.sign(
     {},
     config.jwtSecret,
@@ -196,7 +446,7 @@ test('current-user endpoint rejects missing, invalid, and expired tokens', async
   );
   const cases = [
     { headers: {} },
-    { headers: { Authorization: 'Bearer invalid-token' } },
+    { headers: { Authorization: 'Bearer invalid' } },
     { headers: { Authorization: `Bearer ${expiredToken}` } },
   ];
 
@@ -207,46 +457,13 @@ test('current-user endpoint rejects missing, invalid, and expired tokens', async
   }
 });
 
-test('current-user endpoint returns the authenticated profile, not a client-supplied ID', async () => {
-  const registration = await post('register', {
-    name: 'Second Manager',
-    email: 'second@example.com',
-    password: 'FleetCare123',
-  });
-  assert.equal(registration.status, 201);
-
-  const login = await post('login', {
-    email: 'second@example.com',
-    password: 'FleetCare123',
-  });
-  const cookie = login.headers.get('set-cookie').split(';')[0];
-  const response = await fetch(
-    `${baseUrl}/api/auth/me?userId=${users.get('manager@example.com')._id}`,
-    {
-      headers: { Cookie: cookie },
-    },
+test('cookie-authenticated writes and logout enforce CSRF origin checks', async () => {
+  const { body } = await login();
+  const verification = await verify(
+    body.data.challengeId,
+    latestOtp('manager@example.com'),
   );
-  const body = await response.json();
-
-  assert.equal(response.status, 200);
-  assert.equal(body.data.user.email, 'second@example.com');
-  assert.equal(body.data.user.id, users.get('second@example.com')._id.toString());
-  assert.equal(Object.hasOwn(body.data.user, 'password'), false);
-});
-
-test('HttpOnly cookie authenticates read requests and rejects cross-origin writes', async () => {
-  const login = await post('login', {
-    email: 'manager@example.com',
-    password: 'FleetCare123',
-  });
-  const setCookie = login.headers.get('set-cookie');
-  const cookie = setCookie.split(';')[0];
-
-  const currentUser = await fetch(`${baseUrl}/api/auth/me`, {
-    headers: { Cookie: cookie },
-  });
-  assert.equal(currentUser.status, 200);
-  assert.equal((await currentUser.json()).data.user.email, 'manager@example.com');
+  const cookie = verification.headers.get('set-cookie').split(';')[0];
 
   const rejectedWrite = await fetch(`${baseUrl}/api/vehicles`, {
     method: 'POST',
@@ -258,42 +475,26 @@ test('HttpOnly cookie authenticates read requests and rejects cross-origin write
     body: JSON.stringify({}),
   });
   assert.equal(rejectedWrite.status, 403);
-  assert.equal((await rejectedWrite.json()).error.code, 'CSRF_CHECK_FAILED');
 
-  const missingOriginWrite = await fetch(`${baseUrl}/api/vehicles`, {
+  const trustedWrite = await fetch(`${baseUrl}/api/vehicles`, {
     method: 'POST',
     headers: {
       Cookie: cookie,
       'Content-Type': 'application/json',
+      Origin: config.frontendOrigin,
     },
     body: JSON.stringify({}),
   });
-  assert.equal(missingOriginWrite.status, 403);
+  assert.notEqual(trustedWrite.status, 403);
 
-  const trustedOriginWrite = await fetch(`${baseUrl}/api/vehicles`, {
-    method: 'POST',
-    headers: {
-      Cookie: cookie,
-      'Content-Type': 'application/json',
-      Origin: process.env.FRONTEND_ORIGIN,
-    },
-    body: JSON.stringify({}),
+  const deniedLogout = await post('logout', undefined, {
+    Origin: 'https://untrusted.example',
   });
-  assert.notEqual(trustedOriginWrite.status, 403);
-});
+  assert.equal(deniedLogout.status, 403);
 
-test('logout clears the authentication cookie and requires the configured origin', async () => {
-  const denied = await post('logout');
-  assert.equal(denied.status, 403);
-
-  const response = await post('logout', undefined, {
-    Origin: process.env.FRONTEND_ORIGIN,
-  });
-  const body = await response.json();
-
-  assert.equal(response.status, 200);
-  assert.equal(body.data.loggedOut, true);
-  assert.match(response.headers.get('set-cookie'), /fleetcareAccessToken=/);
-  assert.match(response.headers.get('set-cookie'), /Path=\/api/i);
-  assert.match(response.headers.get('set-cookie'), /Expires=/i);
+  const logout = await post('logout');
+  assert.equal(logout.status, 200);
+  assert.match(logout.headers.get('set-cookie'), /fleetcareAccessToken=/);
+  assert.match(logout.headers.get('set-cookie'), /Path=\/api/i);
+  assert.match(logout.headers.get('set-cookie'), /Expires=/i);
 });

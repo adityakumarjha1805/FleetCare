@@ -6,11 +6,12 @@ export const apiBaseUrl = (
 ).replace(/\/+$/, "");
 
 export class ApiError extends Error {
-  constructor(message, status, code) {
+  constructor(message, status, code, retryAfterSeconds = null) {
     super(message);
     this.name = "ApiError";
     this.status = status;
     this.code = code;
+    this.retryAfterSeconds = retryAfterSeconds;
   }
 }
 

@@ -5,7 +5,7 @@ import { usePathname, useRouter } from "next/navigation";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { fetchCurrentUser } from "../lib/auth-api";
 
-const publicPaths = new Set(["/login", "/signup", "/verify-email"]);
+const publicPaths = new Set(["/login", "/signup"]);
 
 export default function AuthGuard({ children }) {
   const pathname = usePathname();

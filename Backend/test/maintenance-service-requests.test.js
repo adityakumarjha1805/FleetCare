@@ -42,7 +42,6 @@ function makeUser(id) {
     name: 'Fleet Manager',
     email: `${id}@example.com`,
     role: 'user',
-    emailVerified: true,
     createdAt: new Date(),
     updatedAt: new Date(),
   };

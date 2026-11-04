@@ -71,19 +71,9 @@ const registrationRateLimiter = createAuthRateLimiter({
   limit: 10,
   windowMs: 60 * 60 * 1000,
 });
-const otpVerificationRateLimiter = createAuthRateLimiter({
-  limit: 30,
-  windowMs: 15 * 60 * 1000,
-});
-const otpResendRateLimiter = createAuthRateLimiter({
-  limit: 10,
-  windowMs: 60 * 60 * 1000,
-});
 
 module.exports = {
   createAuthRateLimiter,
   loginRateLimiter,
   registrationRateLimiter,
-  otpVerificationRateLimiter,
-  otpResendRateLimiter,
 };

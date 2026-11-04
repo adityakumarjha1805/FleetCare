@@ -3,15 +3,24 @@ import { afterEach, test } from "node:test";
 
 process.env.NEXT_PUBLIC_API_URL = "https://api.example.test/base/";
 
-const [{ apiBaseUrl, ApiError }, { getAuthErrorMessage, registerUser }] =
+const [
+  { apiBaseUrl, ApiError },
+  { getAuthErrorMessage, loginUser, registerUser },
+] =
   await Promise.all([
     import("../lib/api-client.js"),
     import("../lib/auth-api.js"),
   ]);
 const originalFetch = globalThis.fetch;
+const originalWindow = globalThis.window;
 
 afterEach(() => {
   globalThis.fetch = originalFetch;
+  if (originalWindow === undefined) {
+    delete globalThis.window;
+  } else {
+    globalThis.window = originalWindow;
+  }
 });
 
 function response(payload, status) {
@@ -24,6 +33,11 @@ function response(payload, status) {
 }
 
 test("registration uses the configured API URL and sends the supplied normalized email", async () => {
+  const user = {
+    id: "user-id",
+    name: "Test User",
+    email: "new-user@example.test",
+  };
   let requestUrl;
   let requestOptions;
   globalThis.fetch = async (url, options) => {
@@ -33,20 +47,20 @@ test("registration uses the configured API URL and sends the supplied normalized
       {
         success: true,
         data: {
-          verificationRequired: true,
-          challengeId: "A".repeat(43),
+          user,
         },
       },
       201,
     );
   };
 
-  await registerUser({
+  const registeredUser = await registerUser({
     name: "Test User",
     email: "new-user@example.test",
     password: "example-test-password",
   });
 
+  assert.deepEqual(registeredUser, user);
   assert.equal(apiBaseUrl, "https://api.example.test/base");
   assert.equal(requestUrl, `${apiBaseUrl}/api/auth/register`);
   assert.equal(requestOptions.method, "POST");
@@ -55,6 +69,30 @@ test("registration uses the configured API URL and sends the supplied normalized
     email: "new-user@example.test",
     password: "example-test-password",
   });
+});
+
+test("login consumes the direct user response and announces the authenticated session", async () => {
+  const user = {
+    id: "user-id",
+    name: "Test User",
+    email: "new-user@example.test",
+  };
+  const events = [];
+  globalThis.window = {
+    dispatchEvent(event) {
+      events.push(event.type);
+    },
+  };
+  globalThis.fetch = async () =>
+    response({ success: true, data: { user } }, 200);
+
+  const loggedInUser = await loginUser({
+    email: user.email,
+    password: "example-test-password",
+  });
+
+  assert.deepEqual(loggedInUser, user);
+  assert.deepEqual(events, ["fleetcare:session-authenticated"]);
 });
 
 test("the registration UI receives backend error messages without replacing unrelated errors", async () => {

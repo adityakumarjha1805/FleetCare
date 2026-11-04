@@ -59,38 +59,6 @@ if (Buffer.byteLength(jwtSecret, 'utf8') < 32) {
   throw new Error('JWT_SECRET must be at least 32 bytes long');
 }
 
-const resendVariableNames = ['RESEND_API_KEY', 'RESEND_FROM'];
-const resendValues = Object.fromEntries(
-  resendVariableNames.map((name) => [name, process.env[name]?.trim() || '']),
-);
-const hasResendConfiguration = resendVariableNames.some((name) => resendValues[name]);
-let resend = null;
-
-if (hasResendConfiguration) {
-  const missingResendVariables = resendVariableNames.filter((name) => !resendValues[name]);
-  if (missingResendVariables.length > 0) {
-    throw new Error(
-      `Incomplete Resend configuration; set both: ${resendVariableNames.join(', ')}`,
-    );
-  }
-
-  const resendFromAddress = resendValues.RESEND_FROM.replace(
-    /^[^<>\r\n]*<([^<>]+)>$/,
-    '$1',
-  );
-  if (
-    /[\r\n]/.test(resendValues.RESEND_FROM) ||
-    !/^[^<>\s@]+@[^<>\s@]+\.[^<>\s@]+$/.test(resendFromAddress)
-  ) {
-    throw new Error('RESEND_FROM must contain a valid email address');
-  }
-
-  resend = Object.freeze({
-    apiKey: resendValues.RESEND_API_KEY,
-    from: resendValues.RESEND_FROM,
-  });
-}
-
 const port = Number(process.env.PORT || 5000);
 if (!Number.isInteger(port) || port < 1 || port > 65535) {
   throw new Error('PORT must be an integer between 1 and 65535');
@@ -104,5 +72,4 @@ module.exports = Object.freeze({
   authCookieSameSite,
   authCookieSecure: isProduction,
   jwtSecret,
-  resend,
 });

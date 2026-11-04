@@ -103,15 +103,6 @@ test('login endpoint returns 429 after its per-IP limit', async () => {
   await assertRateLimited(await post('login', {}));
 });
 
-test('OTP resend endpoint returns 429 after its per-IP limit', async () => {
-  for (let attempt = 0; attempt < 10; attempt += 1) {
-    const response = await post('resend-otp', {});
-    assert.equal(response.status, 400);
-  }
-
-  await assertRateLimited(await post('resend-otp', {}));
-});
-
 test('authentication rate limiter returns a structured 429 and allows requests after the window', () => {
   let currentTime = 1_000;
   const rateLimit = createAuthRateLimiter({

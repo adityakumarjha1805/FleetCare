@@ -10,8 +10,6 @@ import {
 } from "../lib/auth-api";
 
 const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-const PENDING_CHALLENGE_KEY = "fleetcare.pendingEmailVerification";
-const RESEND_COOLDOWN_MS = 60 * 1000;
 
 function passwordByteLength(value) {
   return new TextEncoder().encode(value).length;
@@ -68,28 +66,21 @@ export default function AuthPage({ mode }) {
     setIsSubmitting(true);
     setError("");
     try {
-      let challenge;
       if (isSignup) {
-        challenge = await registerUser({
+        await registerUser({
           name: values.name.trim(),
           email: values.email.trim().toLowerCase(),
           password: values.password,
         });
-      } else {
-        challenge = await loginUser({
-          email: values.email.trim().toLowerCase(),
-          password: values.password,
-        });
+        router.replace("/login");
+        return;
       }
 
-      sessionStorage.setItem(
-        PENDING_CHALLENGE_KEY,
-        JSON.stringify({
-          challengeId: challenge.challengeId,
-          resendAvailableAt: Date.now() + RESEND_COOLDOWN_MS,
-        }),
-      );
-      router.push("/verify-email");
+      await loginUser({
+        email: values.email.trim().toLowerCase(),
+        password: values.password,
+      });
+      router.replace("/");
     } catch (requestError) {
       setError(getAuthErrorMessage(requestError));
     } finally {

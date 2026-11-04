@@ -45,14 +45,6 @@ Set these variables in `Backend\.env`:
 `Backend\.env.example` provides placeholders for local development. Do not
 commit `.env` or put secrets in frontend variables.
 
-The backend sends email verification codes through the Resend HTTPS API.
-Configure `RESEND_API_KEY` and `RESEND_FROM` together in the backend
-environment only. `RESEND_FROM` must use a sender address verified with
-Resend. Without these variables, the auth endpoints return a clear
-`503 EMAIL_SERVICE_UNAVAILABLE` response rather than attempting an incomplete
-login or registration. Resend uses HTTPS, so it avoids SMTP port restrictions
-on hosts such as Render Free. Never put the API key in frontend variables.
-
 ### Frontend
 
 In a second terminal, from the repository root:
@@ -90,10 +82,6 @@ repository:
    | `JWT_SECRET` | A unique random secret of at least 32 bytes |
    | `AUTH_COOKIE_SAME_SITE` | `None` for the separately hosted frontend and API |
 
-   To enable backend email delivery, also configure `RESEND_API_KEY` and
-   `RESEND_FROM` in the API project's environment settings. Verify the sender
-   domain/address in Resend before using it.
-
    Set variables for the Vercel environments you deploy (Production, Preview,
    and Development as applicable). The API allows one exact frontend origin,
    so use a stable custom or branch domain for previews and configure the
@@ -112,12 +100,11 @@ relying on those limits across multiple instances.
 
 ## Implemented workflows
 
-- **Authentication:** registration and password login start email OTP
-  verification. `POST /api/auth/verify-otp` sets an HttpOnly JWT cookie only
-  after a valid code; protected APIs reject unverified accounts. The frontend
-  collects and submits the OTP, and protected pages check the session through
-  `/api/auth/me`. Sign out clears the cookie; there is no server-side token
-  revocation endpoint, so a copied JWT remains valid until expiry.
+- **Authentication:** registration creates an account and directs the user to
+  sign in. Password login issues an HttpOnly JWT cookie; protected pages check
+  the session through `/api/auth/me`. Sign out clears the cookie; there is no
+  server-side token revocation endpoint, so a copied JWT remains valid until
+  expiry.
 - **Vehicles:** authenticated users can create and list their own vehicle
   records persisted in MongoDB. The backend also has vehicle detail, update,
   and delete endpoints; the current frontend vehicle screen does not expose

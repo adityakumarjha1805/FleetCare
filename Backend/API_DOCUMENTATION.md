@@ -13,21 +13,13 @@ is not a proposal for endpoints that do not yet exist.
 - Protected routes accept the frontend's `fleetcareAccessToken` HttpOnly cookie
   or an explicit `Authorization: Bearer <JWT>` header for non-browser clients.
 - Authentication endpoints are rate-limited per client IP: registration allows
-  10 requests per hour, login allows 10 requests per 15 minutes, OTP
-  verification allows 30 requests per 15 minutes, and OTP resend allows 10
-  requests per hour. Each challenge also permits at most five resends and five
-  incorrect code attempts.
+  10 requests per hour and login allows 10 requests per 15 minutes.
 - The JWT is signed with HS256, issued by `fleetcare-api`, intended for
   `fleetcare-client`, and expires after one hour. Protected requests also
   resolve the token subject to an existing user.
 - The backend reads `MONGODB_URI`, `FRONTEND_ORIGIN`, `JWT_SECRET`, and
   optional `PORT` and `AUTH_COOKIE_SAME_SITE` from its environment. `PORT`
   defaults to `5000`; cookie SameSite defaults to `Lax`.
-- Email verification requires `RESEND_API_KEY` and `RESEND_FROM`; configure
-  both together in the backend environment. When Resend is not configured,
-  registration, login, and resend return `503 EMAIL_SERVICE_UNAVAILABLE`.
-  Keep the Resend API key out of frontend configuration. Resend API errors are
-  not returned to clients.
 - The frontend API uses `NEXT_PUBLIC_API_URL`, defaulting to
   `http://localhost:5000` in development. Production requires this variable
   and an HTTPS URL.
@@ -43,10 +35,8 @@ is not a proposal for endpoints that do not yet exist.
 | Method | Path | Authentication | Current behavior |
 |---|---|---|---|
 | `GET` | `/api/health` | None | Reports API/database readiness |
-| `POST` | `/api/auth/register` | None | Creates an unverified user and emails an OTP |
-| `POST` | `/api/auth/login` | None | Verifies credentials and emails an OTP |
-| `POST` | `/api/auth/verify-otp` | Challenge and configured frontend origin | Consumes OTP and sets an HttpOnly JWT cookie |
-| `POST` | `/api/auth/resend-otp` | Challenge and configured frontend origin | Replaces and resends the OTP |
+| `POST` | `/api/auth/register` | None | Creates an account without starting a session |
+| `POST` | `/api/auth/login` | None | Verifies credentials and sets an HttpOnly JWT cookie |
 | `POST` | `/api/auth/logout` | Configured frontend origin | Clears the authentication cookie |
 | `GET` | `/api/auth/me` | JWT cookie or bearer token | Returns the authenticated user's profile |
 | `POST` | `/api/vehicles` | Bearer JWT | Creates a vehicle owned by the authenticated user |
@@ -83,8 +73,8 @@ mounts them. The additional resource endpoint details are listed below.
 
 ### `POST /api/auth/register`
 
-Creates an unverified user, hashes the password in the User model's save hook,
-and sends an OTP. It does not issue a JWT.
+Creates a user and hashes the password in the User model's save hook. It does
+not issue a JWT; the frontend directs the user to sign in.
 
 Request:
 
@@ -109,15 +99,20 @@ Validation and normalization:
   and duplicate-email attempts.
 - Extra request fields are currently ignored.
 
-Success: `201 Created`. The challenge identifier is an opaque bearer secret;
-the plaintext OTP is delivered only by email.
+Success: `201 Created`.
 
 ```json
 {
   "success": true,
   "data": {
-    "verificationRequired": true,
-    "challengeId": "<opaque challenge identifier>"
+    "user": {
+      "id": "665f00000000000000000001",
+      "name": "Fleet Manager",
+      "email": "manager@example.com",
+      "role": "user",
+      "createdAt": "2026-11-03T10:00:00.000Z",
+      "updatedAt": "2026-11-03T10:00:00.000Z"
+    }
   }
 }
 ```
@@ -142,55 +137,27 @@ Login is limited to 10 attempts per client IP per 15 minutes. Requests rejected
 by the limit return `429 Too Many Requests`, code `RATE_LIMIT_EXCEEDED`, and a
 `Retry-After` header.
 
-Valid credentials start a new email verification challenge and do not issue a
-JWT or set an authentication cookie. Unknown users and incorrect passwords
-return the same generic credentials error.
+Valid credentials issue a JWT in the `fleetcareAccessToken` HttpOnly cookie and
+return the safe user profile. This includes legacy accounts whose stored
+`emailVerified` field is false; email verification is no longer required.
+Unknown users and incorrect passwords return the same generic credentials
+error.
 
 ```json
 {
   "success": true,
   "data": {
-    "verificationRequired": true,
-    "challengeId": "<opaque challenge identifier>"
+    "user": {
+      "id": "665f00000000000000000001",
+      "name": "Fleet Manager",
+      "email": "manager@example.com",
+      "role": "user",
+      "createdAt": "2026-11-03T10:00:00.000Z",
+      "updatedAt": "2026-11-03T10:00:00.000Z"
+    }
   }
 }
 ```
-
-### `POST /api/auth/verify-otp`
-
-Requires the exact configured frontend `Origin`.
-
-```json
-{
-  "challengeId": "<opaque challenge identifier>",
-  "otp": "123456"
-}
-```
-
-The challenge is bound to the user on the server; the client does not submit an
-email address. Codes expire after five minutes, allow five incorrect attempts,
-and are consumed atomically after successful verification. Success returns
-`200 OK` with the safe user profile and sets the signed JWT in the
-`fleetcareAccessToken` HttpOnly cookie. The cookie has path `/api`, expires
-after one hour, uses `SameSite=Lax` by default, and is `Secure` in production.
-Cross-site frontend/API deployments can set `AUTH_COOKIE_SAME_SITE=None` only
-with production HTTPS.
-
-### `POST /api/auth/resend-otp`
-
-Requires the exact configured frontend `Origin`.
-
-```json
-{
-  "challengeId": "<opaque challenge identifier>"
-}
-```
-
-Success returns `{ "success": true, "data": { "verificationRequired": true } }`.
-The previous code is invalidated, a fresh five-minute code is sent, and a
-60-second cooldown applies. Each challenge permits at most five resends and
-expires after 15 minutes. Unknown or expired challenges return a generic
-challenge error.
 
 ### `GET /api/auth/me`
 
@@ -215,9 +182,8 @@ database-backed profile:
 
 Missing token returns `401` with code `UNAUTHORIZED` and message
 `Authentication is required`. Invalid or expired tokens and tokens whose
-subject no longer maps to a user, or whose user is not email-verified return
-`401` with code `UNAUTHORIZED` and message `Invalid or expired authentication
-token`.
+subject no longer maps to a user return `401` with code `UNAUTHORIZED` and
+message `Invalid or expired authentication token`.
 
 ### `POST /api/auth/logout`
 
@@ -226,19 +192,13 @@ Requires the exact configured `FRONTEND_ORIGIN` request origin. Success is
 expired `fleetcareAccessToken` cookie. This clears the browser cookie but does
 not revoke a copied JWT; it remains valid until expiry or the user is removed.
 
-## Frontend integration status
-
-The current frontend auth screen has not yet been updated to capture
-`challengeId`, collect the emailed OTP, or call `/api/auth/verify-otp`.
-Consequently, the backend now requires a separate OTP-aware frontend change
-before users can complete sign-in through the UI. The browser stores the JWT
-only in the HttpOnly cookie and sends it with credentialed API requests.
-Protected pages call `/api/auth/me` before rendering; a `401` redirects to
-`/login`. Sign out calls the backend logout endpoint to clear the cookie.
-Cookie-authenticated state-changing requests require the exact configured
-frontend `Origin`; missing or different origins return `403 CSRF_CHECK_FAILED`.
-Bearer-authenticated requests do not rely on cookies and are not subject to
-that cookie CSRF check.
+The browser stores the JWT only in the HttpOnly cookie and sends it with
+credentialed API requests. Protected pages call `/api/auth/me` before
+rendering; a `401` redirects to `/login`. Sign out calls the backend logout
+endpoint to clear the cookie. Cookie-authenticated state-changing requests
+require the exact configured frontend `Origin`; missing or different origins
+return `403 CSRF_CHECK_FAILED`. Bearer-authenticated requests do not rely on
+cookies and are not subject to that cookie CSRF check.
 
 ## Vehicles
 

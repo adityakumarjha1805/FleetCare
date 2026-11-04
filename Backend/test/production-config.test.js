@@ -50,6 +50,15 @@ test('production configuration accepts HTTPS and TLS-enabled MongoDB settings', 
   assert.equal(result.status, 0, result.stderr);
 });
 
+test('production authentication cookies default to secure cross-site mode', () => {
+  const result = runProductionScript(
+    "const {AUTH_COOKIE_OPTIONS}=require('./utils/authCookie'); if (!AUTH_COOKIE_OPTIONS.secure || !AUTH_COOKIE_OPTIONS.httpOnly || AUTH_COOKIE_OPTIONS.sameSite !== 'none') process.exit(1)",
+    { AUTH_COOKIE_SAME_SITE: '' },
+  );
+
+  assert.equal(result.status, 0, result.stderr);
+});
+
 test('production authentication cookies are Secure and support approved cross-site mode', () => {
   const result = runProductionScript(
     "const {AUTH_COOKIE_OPTIONS}=require('./utils/authCookie'); if (!AUTH_COOKIE_OPTIONS.secure || !AUTH_COOKIE_OPTIONS.httpOnly || AUTH_COOKIE_OPTIONS.sameSite !== 'none') process.exit(1)",

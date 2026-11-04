@@ -40,7 +40,7 @@ Set these variables in `Backend\.env`:
 | `FRONTEND_ORIGIN` | Required | Exact frontend origin allowed by CORS |
 | `JWT_SECRET` | Required | JWT signing secret; provide a random secret of at least 32 bytes |
 | `PORT` | Optional; defaults to `5000` | Backend listening port |
-| `AUTH_COOKIE_SAME_SITE` | Optional; defaults to `Lax` | Cookie SameSite policy; `None` is allowed only with production HTTPS |
+| `AUTH_COOKIE_SAME_SITE` | Optional; defaults to `Lax` in development and `None` in production | Cookie SameSite policy; `None` requires production HTTPS |
 
 `Backend\.env.example` provides placeholders for local development. Do not
 commit `.env` or put secrets in frontend variables.
@@ -80,7 +80,7 @@ repository:
    | `MONGODB_URI` | A MongoDB Atlas connection string with TLS enabled |
    | `FRONTEND_ORIGIN` | The exact HTTPS origin of the frontend, with no path or trailing slash |
    | `JWT_SECRET` | A unique random secret of at least 32 bytes |
-   | `AUTH_COOKIE_SAME_SITE` | `None` for the separately hosted frontend and API |
+   | `AUTH_COOKIE_SAME_SITE` | Optional; defaults to `None` in production for the separately hosted frontend and API |
 
    Set variables for the Vercel environments you deploy (Production, Preview,
    and Development as applicable). The API allows one exact frontend origin,

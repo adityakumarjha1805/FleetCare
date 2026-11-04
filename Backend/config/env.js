@@ -46,7 +46,9 @@ if (isProduction && /(?:[?&])(?:tls|ssl)=false(?:&|$)/i.test(mongodbUri)) {
   throw new Error('MONGODB_URI cannot disable TLS in production');
 }
 
-const authCookieSameSite = (process.env.AUTH_COOKIE_SAME_SITE || 'lax').toLowerCase();
+const authCookieSameSite = (
+  process.env.AUTH_COOKIE_SAME_SITE || (isProduction ? 'none' : 'lax')
+).toLowerCase();
 if (!['lax', 'none'].includes(authCookieSameSite)) {
   throw new Error('AUTH_COOKIE_SAME_SITE must be Lax or None');
 }

@@ -19,7 +19,10 @@ is not a proposal for endpoints that do not yet exist.
   resolve the token subject to an existing user.
 - The backend reads `MONGODB_URI`, `FRONTEND_ORIGIN`, `JWT_SECRET`, and
   optional `PORT` and `AUTH_COOKIE_SAME_SITE` from its environment. `PORT`
-  defaults to `5000`; cookie SameSite defaults to `Lax`.
+  defaults to `5000`; cookie SameSite defaults to `Lax` in development and
+  `None` in production to support separately hosted frontend and API projects.
+  Production cookies remain `Secure` and `HttpOnly`; unsafe cookie-authenticated
+  requests require the configured frontend origin.
 - The frontend API uses `NEXT_PUBLIC_API_URL`, defaulting to
   `http://localhost:5000` in development. Production requires this variable
   and an HTTPS URL.

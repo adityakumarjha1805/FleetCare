@@ -20,10 +20,24 @@ app.use((req, res, next) => {
 
 app.use(
   cors({
-    origin: config.frontendOrigin,
-    methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
-    allowedHeaders: ['Content-Type', 'Authorization'],
-    credentials: true,
+     origin: (origin, callback) => {
+    const isProduction =
+      origin === config.frontendOrigin;
+
+    const isFleetCarePreview =
+      /^https:\/\/fleetcar-[a-z0-9-]+-team-aditya1\.vercel\.app$/.test(
+        origin || ''
+      );
+
+    if (!origin || isProduction || isFleetCarePreview) {
+      callback(null, true);
+    } else {
+      callback(new Error('Origin not allowed by CORS'));
+    }
+  },
+  methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization'],
+  credentials: true,
   }),
 );
 app.use(express.json({ limit: '1mb' }));

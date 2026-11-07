@@ -14,11 +14,11 @@
   --app-font: var(--font-geist-sans), Arial, Helvetica, sans-serif;
 }
 
-@theme inline {
+/* @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
   --font-sans: var(--font-geist-sans);
-}
+} */
 
 * {
   box-sizing: border-box;

@@ -42,6 +42,7 @@ is not a proposal for endpoints that do not yet exist.
 | `POST` | `/api/auth/login` | None | Verifies credentials and sets an HttpOnly JWT cookie |
 | `POST` | `/api/auth/logout` | Configured frontend origin | Clears the authentication cookie |
 | `GET` | `/api/auth/me` | JWT cookie or bearer token | Returns the authenticated user's profile |
+| `POST` | `/api/auth/onboarding/complete` | JWT cookie or bearer token | Persists onboarding completion |
 | `POST` | `/api/vehicles` | Bearer JWT | Creates a vehicle owned by the authenticated user |
 | `GET` | `/api/vehicles` | Bearer JWT | Lists the authenticated user's vehicles |
 | `GET` | `/api/vehicles/:id` | Bearer JWT | Gets one vehicle owned by the authenticated user |
@@ -101,6 +102,7 @@ Validation and normalization:
 - Registration rate limiting counts all requests, including malformed requests
   and duplicate-email attempts.
 - Extra request fields are currently ignored.
+- New accounts start with `onboardingCompleted: false`.
 
 Success: `201 Created`.
 
@@ -113,6 +115,7 @@ Success: `201 Created`.
       "name": "Fleet Manager",
       "email": "manager@example.com",
       "role": "user",
+      "onboardingCompleted": false,
       "createdAt": "2026-11-03T10:00:00.000Z",
       "updatedAt": "2026-11-03T10:00:00.000Z"
     }
@@ -155,6 +158,7 @@ error.
       "name": "Fleet Manager",
       "email": "manager@example.com",
       "role": "user",
+      "onboardingCompleted": false,
       "createdAt": "2026-11-03T10:00:00.000Z",
       "updatedAt": "2026-11-03T10:00:00.000Z"
     }
@@ -176,6 +180,7 @@ database-backed profile:
       "name": "Fleet Manager",
       "email": "manager@example.com",
       "role": "user",
+      "onboardingCompleted": false,
       "createdAt": "2026-11-03T10:00:00.000Z",
       "updatedAt": "2026-11-03T10:00:00.000Z"
     }
@@ -187,6 +192,23 @@ Missing token returns `401` with code `UNAUTHORIZED` and message
 `Authentication is required`. Invalid or expired tokens and tokens whose
 subject no longer maps to a user return `401` with code `UNAUTHORIZED` and
 message `Invalid or expired authentication token`.
+
+The safe user profile includes `onboardingCompleted`. Existing database
+documents without this field are treated as already onboarded, so they are not
+forced through the new-user flow.
+
+### `POST /api/auth/onboarding/complete`
+
+Requires a valid JWT cookie or bearer token. Cookie-authenticated requests must
+include the configured frontend origin. Send an empty JSON object:
+
+```json
+{}
+```
+
+Success stores `onboardingCompleted: true` for the authenticated account and
+returns the updated safe profile. Repeating the request is safe. Invalid
+request bodies return `400`; missing or invalid sessions return `401`.
 
 ### `POST /api/auth/logout`
 

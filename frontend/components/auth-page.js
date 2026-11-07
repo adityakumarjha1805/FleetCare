@@ -8,6 +8,7 @@ import {
   loginUser,
   registerUser,
 } from "../lib/auth-api";
+import { getSafeReturnPath } from "../lib/safe-return-path";
 
 const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
@@ -66,21 +67,32 @@ export default function AuthPage({ mode }) {
     setIsSubmitting(true);
     setError("");
     try {
+      const returnPath = getSafeReturnPath(
+        new URLSearchParams(window.location.search).get("next"),
+      );
       if (isSignup) {
         await registerUser({
           name: values.name.trim(),
           email: values.email.trim().toLowerCase(),
           password: values.password,
         });
-        router.replace("/login");
+        router.replace(
+          returnPath
+            ? `/login?next=${encodeURIComponent(returnPath)}`
+            : "/login",
+        );
         return;
       }
 
-      await loginUser({
+      const user = await loginUser({
         email: values.email.trim().toLowerCase(),
         password: values.password,
       });
-      router.replace("/");
+      router.replace(
+        user.onboardingCompleted
+          ? returnPath || "/dashboard"
+          : "/onboarding",
+      );
     } catch (requestError) {
       setError(getAuthErrorMessage(requestError));
     } finally {

@@ -62,7 +62,13 @@ function assertUser(user) {
       "INVALID_RESPONSE",
     );
   }
-  return user;
+  return {
+    ...user,
+    onboardingCompleted:
+      typeof user.onboardingCompleted === "boolean"
+        ? user.onboardingCompleted
+        : true,
+  };
 }
 
 export async function registerUser({ name, email, password }) {
@@ -79,8 +85,26 @@ export function getAuthErrorMessage(error) {
 export async function loginUser({ email, password }) {
   const data = await requestAuth("login", { email, password });
   const user = assertUser(data?.user);
-  window.dispatchEvent(new Event("fleetcare:session-authenticated"));
+  window.dispatchEvent(
+    new CustomEvent("fleetcare:session-authenticated", { detail: { user } }),
+  );
   return user;
+}
+
+export async function completeOnboarding() {
+  try {
+    const data = await requestAuth("onboarding/complete", {});
+    const user = assertUser(data?.user);
+    window.dispatchEvent(
+      new CustomEvent("fleetcare:onboarding-completed", { detail: { user } }),
+    );
+    return user;
+  } catch (error) {
+    if (error.status === 401) {
+      window.dispatchEvent(new Event("fleetcare:unauthorized"));
+    }
+    throw error;
+  }
 }
 
 export function fetchCurrentUser() {

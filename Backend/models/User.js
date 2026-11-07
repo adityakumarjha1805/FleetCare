@@ -30,6 +30,12 @@ const userSchema = new mongoose.Schema(
       default: 'user',
       immutable: true,
     },
+    onboardingCompleted: {
+      type: Boolean,
+      default() {
+        return this.isNew ? false : true;
+      },
+    },
   },
   {
     timestamps: true,

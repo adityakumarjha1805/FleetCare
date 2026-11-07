@@ -95,6 +95,7 @@ async function authenticate(req, res, next) {
       name: user.name,
       email: user.email,
       role: user.role,
+      onboardingCompleted: user.onboardingCompleted !== false,
       createdAt: user.createdAt,
       updatedAt: user.updatedAt,
     };

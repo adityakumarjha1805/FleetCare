@@ -1,6 +1,7 @@
 const bcrypt = require('bcryptjs');
 const express = require('express');
 const jwt = require('jsonwebtoken');
+const mongoose = require('mongoose');
 const config = require('../config/env');
 const User = require('../models/User');
 const authenticate = require('../middleware/authenticate');
@@ -40,6 +41,7 @@ function safeUser(user) {
     name: user.name,
     email: user.email,
     role: user.role,
+    onboardingCompleted: user.onboardingCompleted !== false,
     createdAt: user.createdAt,
     updatedAt: user.updatedAt,
   };
@@ -130,7 +132,12 @@ router.post('/register', registrationRateLimiter, async (req, res, next) => {
       return emailAlreadyRegistered(res);
     }
 
-    const user = await User.create({ name, email, password });
+    const user = await User.create({
+      name,
+      email,
+      password,
+      onboardingCompleted: false,
+    });
     return res.status(201).json({
       success: true,
       data: {
@@ -214,6 +221,41 @@ router.get('/me', authenticate, (req, res) => {
       user: req.user,
     },
   });
+});
+
+router.post('/onboarding/complete', authenticate, async (req, res, next) => {
+  if (!isRecord(req.body) || Object.keys(req.body).length !== 0) {
+    return invalidInput(res, 'An empty JSON object is required');
+  }
+
+  if (!mongoose.isValidObjectId(req.user.id)) {
+    return invalidInput(res, 'A valid authenticated user is required');
+  }
+
+  try {
+    const result = await User.updateOne(
+      { _id: req.user.id },
+      { $set: { onboardingCompleted: true } },
+    );
+    if (result.matchedCount !== 1) {
+      return res.status(401).json({
+        success: false,
+        error: {
+          code: 'UNAUTHORIZED',
+          message: 'Authentication is required',
+        },
+      });
+    }
+
+    return res.json({
+      success: true,
+      data: {
+        user: { ...req.user, onboardingCompleted: true },
+      },
+    });
+  } catch (error) {
+    return next(error);
+  }
 });
 
 module.exports = router;

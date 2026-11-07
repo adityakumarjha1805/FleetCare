@@ -15,6 +15,7 @@ const originals = {
   findOne: User.findOne,
   findById: User.findById,
   create: User.create,
+  updateOne: User.updateOne,
 };
 let server;
 let baseUrl;
@@ -62,6 +63,12 @@ before(async () => {
   User.findOne = (filter) => queryFor(findUser(filter));
   User.findById = async (id) =>
     [...users.values()].find((user) => user._id.toString() === id) || null;
+  User.updateOne = async (filter, update) => {
+    const user = findUser(filter);
+    if (!user) return { matchedCount: 0 };
+    Object.assign(user, update.$set);
+    return { matchedCount: 1 };
+  };
   User.create = async (fields) => {
     if (users.has(fields.email)) {
       throw Object.assign(new Error('Duplicate email index'), {
@@ -94,6 +101,7 @@ after(async () => {
   User.findOne = originals.findOne;
   User.findById = originals.findById;
   User.create = originals.create;
+  User.updateOne = originals.updateOne;
 
   if (server) {
     await new Promise((resolve, reject) => {
@@ -133,11 +141,13 @@ test('registration normalizes email, hashes password, creates one account, and i
     name: 'Fleet Manager',
     email,
     role: 'user',
+    onboardingCompleted: false,
     createdAt: user.createdAt.toISOString(),
     updatedAt: user.updatedAt.toISOString(),
   });
   assert.equal(users.size, countBefore + 1);
   assert.equal(user.email, email);
+  assert.equal(user.onboardingCompleted, false);
   assert.notEqual(user.password, 'FleetCare123');
   assert.equal(await bcrypt.compare('FleetCare123', user.password), true);
   assert.equal(response.headers.get('set-cookie'), null);
@@ -248,6 +258,7 @@ test('login accepts a legacy unverified account and issues a secure session cook
   const registration = await register(email);
   const user = users.get(email);
   user.emailVerified = false;
+  delete user.onboardingCompleted;
 
   const { response, body } = await login(` ${email.toUpperCase()} `);
   const cookie = response.headers.get('set-cookie');
@@ -262,6 +273,7 @@ test('login accepts a legacy unverified account and issues a secure session cook
   assert.equal(response.status, 200);
   assert.equal(body.success, true);
   assert.equal(body.data.user.email, email);
+  assert.equal(body.data.user.onboardingCompleted, true);
   assert.equal(claims.sub, user._id.toString());
   assert.match(cookie, /HttpOnly/i);
   assert.match(cookie, /SameSite=Lax/i);
@@ -271,8 +283,52 @@ test('login accepts a legacy unverified account and issues a secure session cook
   const authenticated = await fetch(`${baseUrl}/api/auth/me`, {
     headers: { Cookie: cookie.split(';')[0] },
   });
+  const sessionBody = await authenticated.json();
   assert.equal(authenticated.status, 200);
-  assert.equal((await authenticated.json()).data.user.email, email);
+  assert.equal(sessionBody.data.user.email, email);
+  assert.equal(sessionBody.data.user.onboardingCompleted, true);
+});
+
+test('onboarding completion requires authentication, validates input, and persists across sessions', async () => {
+  const email = `onboarding-${Date.now()}@example.test`;
+  await register(email);
+
+  const unauthenticated = await post('onboarding/complete', {});
+  assert.equal(unauthenticated.status, 401);
+
+  const { response: loginResponse, body: loginBody } = await login(email);
+  const cookie = loginResponse.headers.get('set-cookie').split(';')[0];
+  assert.equal(loginBody.data.user.onboardingCompleted, false);
+
+  const initialSession = await fetch(`${baseUrl}/api/auth/me`, {
+    headers: { Cookie: cookie },
+  });
+  const initialSessionBody = await initialSession.json();
+  assert.equal(initialSessionBody.data.user.onboardingCompleted, false);
+  assert.equal('password' in initialSessionBody.data.user, false);
+
+  const invalid = await post(
+    'onboarding/complete',
+    { onboardingCompleted: true },
+    { Cookie: cookie },
+  );
+  assert.equal(invalid.status, 400);
+  assert.equal((await invalid.json()).error.code, 'INVALID_INPUT');
+
+  const completed = await post('onboarding/complete', {}, { Cookie: cookie });
+  const completedBody = await completed.json();
+  assert.equal(completed.status, 200);
+  assert.equal(completedBody.data.user.onboardingCompleted, true);
+  assert.equal(users.get(email).onboardingCompleted, true);
+
+  const session = await fetch(`${baseUrl}/api/auth/me`, {
+    headers: { Cookie: cookie },
+  });
+  assert.equal((await session.json()).data.user.onboardingCompleted, true);
+
+  await post('logout');
+  const subsequentLogin = await login(email);
+  assert.equal(subsequentLogin.body.data.user.onboardingCompleted, true);
 });
 
 test('login rejects an incorrect password and unknown account with the same error', async () => {

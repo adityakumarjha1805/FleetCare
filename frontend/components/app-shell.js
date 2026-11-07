@@ -6,7 +6,7 @@ import { useEffect, useRef, useState } from "react";
 import { logoutUser } from "../lib/auth-api";
 
 const navigationItems = [
-  { label: "Dashboard", href: "/", icon: "dashboard" },
+  { label: "Dashboard", href: "/dashboard", icon: "dashboard" },
   { label: "Vehicles", href: "/vehicles", icon: "vehicles" },
   { label: "Diagnostics", href: "/diagnostics", icon: "diagnostics" },
   {
@@ -104,6 +104,7 @@ export default function AppShell({
   children,
   title = "Dashboard",
   showPageHeading = true,
+  onNavigate,
 }) {
   const pathname = usePathname();
   const router = useRouter();
@@ -225,7 +226,12 @@ export default function AppShell({
         }
       >
         <div className="sidebar-header">
-          <Link className="brand" href="/" aria-label="FleetCare home">
+          <Link
+            className="brand"
+            href="/dashboard"
+            aria-label="FleetCare home"
+            onClick={onNavigate}
+          >
             <BrandMark />
             <span className="brand-name">FleetCare</span>
           </Link>
@@ -255,15 +261,18 @@ export default function AppShell({
               key={item.href}
               aria-label={item.label}
               aria-current={
-                item.href === "/"
-                  ? pathname === "/"
+                item.href === "/dashboard"
+                  ? pathname === "/dashboard"
                     ? "page"
                     : undefined
                   : pathname === item.href || pathname.startsWith(`${item.href}/`)
                     ? "page"
                     : undefined
               }
-              onClick={() => setIsMobileNavOpen(false)}
+              onClick={() => {
+                setIsMobileNavOpen(false);
+                onNavigate?.();
+              }}
               title={isCollapsed ? item.label : undefined}
               ref={index === 0 ? firstNavigationLinkRef : undefined}
             >

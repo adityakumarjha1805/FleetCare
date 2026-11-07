@@ -5,7 +5,7 @@ process.env.NEXT_PUBLIC_API_URL = "https://api.example.test/base/";
 
 const [
   { apiBaseUrl, ApiError },
-  { getAuthErrorMessage, loginUser, registerUser },
+  { completeOnboarding, getAuthErrorMessage, loginUser, registerUser },
 ] =
   await Promise.all([
     import("../lib/api-client.js"),
@@ -37,6 +37,7 @@ test("registration uses the configured API URL and sends the supplied normalized
     id: "user-id",
     name: "Test User",
     email: "new-user@example.test",
+    onboardingCompleted: false,
   };
   let requestUrl;
   let requestOptions;
@@ -76,11 +77,12 @@ test("login consumes the direct user response and announces the authenticated se
     id: "user-id",
     name: "Test User",
     email: "new-user@example.test",
+    onboardingCompleted: false,
   };
-  const events = [];
+  let sessionEvent;
   globalThis.window = {
     dispatchEvent(event) {
-      events.push(event.type);
+      sessionEvent = event;
     },
   };
   globalThis.fetch = async () =>
@@ -92,7 +94,40 @@ test("login consumes the direct user response and announces the authenticated se
   });
 
   assert.deepEqual(loggedInUser, user);
-  assert.deepEqual(events, ["fleetcare:session-authenticated"]);
+  assert.equal(sessionEvent.type, "fleetcare:session-authenticated");
+  assert.deepEqual(sessionEvent.detail, { user });
+});
+
+test("onboarding completion posts to the authenticated endpoint and announces the saved status", async () => {
+  const user = {
+    id: "user-id",
+    name: "Test User",
+    email: "new-user@example.test",
+    onboardingCompleted: true,
+  };
+  let completionEvent;
+  let requestUrl;
+  let requestOptions;
+  globalThis.window = {
+    dispatchEvent(event) {
+      completionEvent = event;
+    },
+  };
+  globalThis.fetch = async (url, options) => {
+    requestUrl = url;
+    requestOptions = options;
+    return response({ success: true, data: { user } }, 200);
+  };
+
+  const completedUser = await completeOnboarding();
+
+  assert.deepEqual(completedUser, user);
+  assert.equal(requestUrl, `${apiBaseUrl}/api/auth/onboarding/complete`);
+  assert.equal(requestOptions.method, "POST");
+  assert.equal(requestOptions.credentials, "include");
+  assert.deepEqual(JSON.parse(requestOptions.body), {});
+  assert.equal(completionEvent.type, "fleetcare:onboarding-completed");
+  assert.deepEqual(completionEvent.detail, { user });
 });
 
 test("the registration UI receives backend error messages without replacing unrelated errors", async () => {

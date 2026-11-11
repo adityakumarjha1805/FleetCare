@@ -4,6 +4,15 @@ const authenticate = require('../middleware/authenticate');
 const ServiceRequest = require('../models/ServiceRequest');
 const Vehicle = require('../models/Vehicle');
 const { parseDateOnly, toDateOnly } = require('../utils/dateOnly');
+const { requireOperationalRole } = require('../middleware/authorize');
+const {
+  organizationValue,
+  withOrganizationFilter,
+} = require('../utils/organizationAccess');
+const {
+  createWorkflowNotifications,
+  platformRecipients,
+} = require('../services/notifications');
 
 const router = express.Router();
 const serviceTypes = [
@@ -32,6 +41,9 @@ const editableFields = [
 ];
 
 router.use(authenticate);
+const readRequestAccess = requireOperationalRole('user');
+const createRequestAccess = requireOperationalRole('user');
+const transitionRequestAccess = requireOperationalRole('user');
 
 function sendError(res, status, code, message) {
   return res.status(status).json({
@@ -133,18 +145,18 @@ function notFound(res) {
   return sendError(res, 404, 'NOT_FOUND', 'Service request not found');
 }
 
-async function findOwnedVehicle(vehicleId, ownerId) {
-  return Vehicle.findOne({ _id: vehicleId, owner: ownerId });
+async function findOwnedVehicle(req, vehicleId) {
+  return Vehicle.findOne(withOrganizationFilter(req, { _id: vehicleId }));
 }
 
-router.post('/', async (req, res, next) => {
+router.post('/', createRequestAccess, async (req, res, next) => {
   const { values, error } = validateInput(req.body);
   if (error) {
     return sendError(res, 400, 'INVALID_SERVICE_REQUEST', error);
   }
 
   try {
-    const vehicle = await findOwnedVehicle(values.vehicleId, req.user.id);
+    const vehicle = await findOwnedVehicle(req, values.vehicleId);
     if (!vehicle) {
       return sendError(res, 404, 'VEHICLE_NOT_FOUND', 'Vehicle not found');
     }
@@ -153,8 +165,19 @@ router.post('/', async (req, res, next) => {
       ...values,
       vehicle: vehicle._id,
       owner: req.user.id,
+      organization: organizationValue(req),
       requestedDate: new Date(),
       status: 'Pending',
+    });
+    const recipients = await platformRecipients(['admin'], req.user.id);
+    await createWorkflowNotifications({
+      recipientIds: recipients,
+      title: 'New service request',
+      message: `${vehicle.vehicleName} has a new ${values.serviceType.toLowerCase()} request.`,
+      type: 'service_request',
+      relatedResourceType: 'ServiceRequest',
+      relatedResourceId: record._id,
+      dedupeKey: `service-request-created:${record._id}`,
     });
     return res.status(201).json({
       success: true,
@@ -165,13 +188,13 @@ router.post('/', async (req, res, next) => {
   }
 });
 
-router.get('/', async (req, res, next) => {
-  const filter = { owner: req.user.id };
+router.get('/', readRequestAccess, async (req, res, next) => {
+  let filter = withOrganizationFilter(req);
   if (req.query.vehicleId !== undefined) {
     if (!mongoose.isValidObjectId(req.query.vehicleId)) {
       return sendError(res, 400, 'INVALID_VEHICLE_ID', 'Vehicle ID is invalid');
     }
-    filter.vehicle = req.query.vehicleId;
+    filter = withOrganizationFilter(req, { vehicle: req.query.vehicleId });
   }
 
   try {
@@ -187,14 +210,13 @@ router.get('/', async (req, res, next) => {
   }
 });
 
-router.get('/:id', async (req, res, next) => {
+router.get('/:id', readRequestAccess, async (req, res, next) => {
   if (!mongoose.isValidObjectId(req.params.id)) return invalidId(res);
 
   try {
-    const record = await ServiceRequest.findOne({
-      _id: req.params.id,
-      owner: req.user.id,
-    }).populate('vehicle', 'vehicleName registrationNumber');
+    const record = await ServiceRequest.findOne(
+      withOrganizationFilter(req, { _id: req.params.id }),
+    ).populate('vehicle', 'vehicleName registrationNumber');
     if (!record) return notFound(res);
     return res.json({
       success: true,
@@ -205,7 +227,7 @@ router.get('/:id', async (req, res, next) => {
   }
 });
 
-router.put('/:id', async (req, res, next) => {
+router.put('/:id', createRequestAccess, async (req, res, next) => {
   if (!mongoose.isValidObjectId(req.params.id)) return invalidId(res);
   const { values, error } = validateInput(req.body);
   if (error) {
@@ -213,13 +235,16 @@ router.put('/:id', async (req, res, next) => {
   }
 
   try {
-    const vehicle = await findOwnedVehicle(values.vehicleId, req.user.id);
+    const vehicle = await findOwnedVehicle(req, values.vehicleId);
     if (!vehicle) {
       return sendError(res, 404, 'VEHICLE_NOT_FOUND', 'Vehicle not found');
     }
 
     const record = await ServiceRequest.findOneAndUpdate(
-      { _id: req.params.id, owner: req.user.id, status: 'Pending' },
+      withOrganizationFilter(req, {
+        _id: req.params.id,
+        status: 'Pending',
+      }),
       {
         $set: {
           vehicle: vehicle._id,
@@ -242,7 +267,7 @@ router.put('/:id', async (req, res, next) => {
   }
 });
 
-router.patch('/:id', async (req, res, next) => {
+router.patch('/:id', transitionRequestAccess, async (req, res, next) => {
   if (!mongoose.isValidObjectId(req.params.id)) return invalidId(res);
   if (!isRecord(req.body) || Object.keys(req.body).length !== 1) {
     return sendError(
@@ -262,10 +287,9 @@ router.patch('/:id', async (req, res, next) => {
   }
 
   try {
-    const current = await ServiceRequest.findOne({
-      _id: req.params.id,
-      owner: req.user.id,
-    });
+    const current = await ServiceRequest.findOne(
+      withOrganizationFilter(req, { _id: req.params.id }),
+    );
     if (!current) return notFound(res);
 
     const allowed = allowedStatusTransitions[current.status] || [];
@@ -279,7 +303,10 @@ router.patch('/:id', async (req, res, next) => {
     }
 
     const updated = await ServiceRequest.findOneAndUpdate(
-      { _id: req.params.id, owner: req.user.id, status: current.status },
+      withOrganizationFilter(req, {
+        _id: req.params.id,
+        status: current.status,
+      }),
       { $set: { status: req.body.status } },
       { new: true, runValidators: true },
     ).populate('vehicle', 'vehicleName registrationNumber');
@@ -291,6 +318,15 @@ router.patch('/:id', async (req, res, next) => {
         'The service request status changed before this update could be applied',
       );
     }
+    await createWorkflowNotifications({
+      recipientIds: [current.owner],
+      title: 'Service request status updated',
+      message: `Your service request is now ${updated.status}.`,
+      type: 'service_request',
+      relatedResourceType: 'ServiceRequest',
+      relatedResourceId: updated._id,
+      dedupeKey: `service-request-status:${updated._id}:${updated.status}`,
+    });
     return res.json({
       success: true,
       data: { request: safeRequest(updated) },
@@ -300,15 +336,16 @@ router.patch('/:id', async (req, res, next) => {
   }
 });
 
-router.delete('/:id', async (req, res, next) => {
+router.delete('/:id', createRequestAccess, async (req, res, next) => {
   if (!mongoose.isValidObjectId(req.params.id)) return invalidId(res);
 
   try {
-    const record = await ServiceRequest.findOneAndDelete({
-      _id: req.params.id,
-      owner: req.user.id,
-      status: 'Pending',
-    }).populate('vehicle', 'vehicleName registrationNumber');
+    const record = await ServiceRequest.findOneAndDelete(
+      withOrganizationFilter(req, {
+        _id: req.params.id,
+        status: 'Pending',
+      }),
+    ).populate('vehicle', 'vehicleName registrationNumber');
     if (!record) return notFound(res);
     return res.json({
       success: true,

@@ -3,7 +3,13 @@
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
-import { logoutUser } from "../lib/auth-api";
+import { fetchCurrentUser, logoutUser } from "../lib/auth-api";
+import {
+  fetchNotifications,
+  fetchUnreadNotificationCount,
+  markAllNotificationsRead,
+  markNotificationRead,
+} from "../lib/notifications-api";
 
 const navigationItems = [
   { label: "Dashboard", href: "/dashboard", icon: "dashboard" },
@@ -16,6 +22,14 @@ const navigationItems = [
   },
   { label: "Maintenance", href: "/maintenance", icon: "maintenance" },
   { label: "Service Requests", href: "/service-requests", icon: "requests" },
+  { label: "Parts", href: "/parts", icon: "parts" },
+  { label: "Reports", href: "/reports", icon: "reports" },
+  {
+    label: "Admin Panel",
+    href: "/admin",
+    icon: "organization",
+    adminOnly: true,
+  },
 ];
 
 function NavigationIcon({ name }) {
@@ -63,6 +77,27 @@ function NavigationIcon({ name }) {
           <path d="M5 19.5h14a2 2 0 0 0 2-2v-7a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v7a2 2 0 0 0 2 2Z" />
         </svg>
       );
+    case "organization":
+      return (
+        <svg {...commonProps}>
+          <circle cx="8" cy="8" r="3" />
+          <circle cx="16" cy="8" r="3" />
+          <path d="M3.5 19c.6-3 2-4.5 4.5-4.5s3.9 1.5 4.5 4.5m0 0c.6-3 2-4.5 4.5-4.5s3.9 1.5 4.5 4.5" />
+        </svg>
+      );
+    case "parts":
+      return (
+        <svg {...commonProps}>
+          <path d="M5 5.5h14v13H5z" />
+          <path d="M8 9h8m-8 3h8m-8 3h5" />
+        </svg>
+      );
+    case "reports":
+      return (
+        <svg {...commonProps}>
+          <path d="M4 19.5h16M6.5 17V9.5m5.5 7.5V5m5.5 12V8" />
+        </svg>
+      );
     case "maintenance":
       return (
         <svg {...commonProps}>
@@ -100,6 +135,156 @@ function BrandMark() {
   );
 }
 
+function notificationPath(notification) {
+  const paths = {
+    PartsRequest: "/parts",
+    ServiceRequest: "/service-requests",
+    MaintenanceRecord: "/maintenance",
+  };
+  return paths[notification.relatedResource?.type] || null;
+}
+
+function NotificationIcon() {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+      <path
+        d="M18 9a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9Zm-8 12h4"
+        stroke="currentColor"
+        strokeWidth="1.7"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </svg>
+  );
+}
+
+function NotificationCenter() {
+  const [isOpen, setIsOpen] = useState(false);
+  const [notifications, setNotifications] = useState([]);
+  const [unreadCount, setUnreadCount] = useState(0);
+  const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState("");
+  const [actionMessage, setActionMessage] = useState("");
+
+  async function loadNotifications() {
+    setIsLoading(true);
+    setError("");
+    try {
+      const [items, count] = await Promise.all([
+        fetchNotifications(),
+        fetchUnreadNotificationCount(),
+      ]);
+      setNotifications(items);
+      setUnreadCount(count);
+    } catch (requestError) {
+      if (requestError.status !== 401) {
+        setError(requestError.message || "Unable to load notifications.");
+      }
+    } finally {
+      setIsLoading(false);
+    }
+  }
+
+  useEffect(() => {
+    const timer = window.setTimeout(loadNotifications, 0);
+    return () => window.clearTimeout(timer);
+  }, []);
+
+  async function markRead(notification) {
+    if (notification.read) return;
+    try {
+      const updated = await markNotificationRead(notification.id);
+      setNotifications((current) =>
+        current.map((item) => (item.id === updated.id ? updated : item)),
+      );
+      setUnreadCount((count) => Math.max(0, count - 1));
+    } catch (requestError) {
+      setError(requestError.message || "Unable to update notification.");
+    }
+  }
+
+  async function markAllRead() {
+    try {
+      await markAllNotificationsRead();
+      setNotifications((current) =>
+        current.map((notification) => ({ ...notification, read: true })),
+      );
+      setUnreadCount(0);
+      setActionMessage("All notifications marked as read.");
+    } catch (requestError) {
+      setError(requestError.message || "Unable to update notifications.");
+    }
+  }
+
+  function openNotification(notification) {
+    markRead(notification);
+    const path = notificationPath(notification);
+    if (path) {
+      setIsOpen(false);
+      window.location.assign(path);
+    }
+  }
+
+  return (
+    <div className="notification-center">
+      <button
+        className="notification-toggle"
+        type="button"
+        aria-label={`Notifications${unreadCount ? `, ${unreadCount} unread` : ""}`}
+        aria-expanded={isOpen}
+        aria-controls="notification-panel"
+        onClick={() => {
+          setIsOpen((open) => !open);
+          setActionMessage("");
+          if (!isOpen) loadNotifications();
+        }}
+      >
+        <NotificationIcon />
+        {unreadCount > 0 && (
+          <span className="notification-count" aria-label={`${unreadCount} unread`}>
+            {unreadCount > 99 ? "99+" : unreadCount}
+          </span>
+        )}
+      </button>
+      {isOpen && (
+        <section className="notification-panel" id="notification-panel" aria-label="Notifications">
+          <div className="notification-panel-heading">
+            <h2>Notifications</h2>
+            <button type="button" onClick={markAllRead} disabled={!unreadCount}>
+              Mark all read
+            </button>
+          </div>
+          {error && <p className="notification-error" role="alert">{error}</p>}
+          {actionMessage && <p className="notification-success" role="status">{actionMessage}</p>}
+          {isLoading ? (
+            <p className="notification-feedback" role="status">Loading notifications…</p>
+          ) : notifications.length === 0 ? (
+            <p className="notification-feedback">You’re all caught up.</p>
+          ) : (
+            <div className="notification-list">
+              {notifications.map((notification) => (
+                <button
+                  className={`notification-item${notification.read ? "" : " notification-item-unread"}`}
+                  type="button"
+                  key={notification.id}
+                  onClick={() => openNotification(notification)}
+                >
+                  <span className="notification-item-dot" aria-hidden="true" />
+                  <span>
+                    <strong>{notification.title}</strong>
+                    <span>{notification.message}</span>
+                    <small>{new Intl.DateTimeFormat("en", { dateStyle: "medium" }).format(new Date(notification.createdAt))}</small>
+                  </span>
+                </button>
+              ))}
+            </div>
+          )}
+        </section>
+      )}
+    </div>
+  );
+}
+
 export default function AppShell({
   children,
   title = "Dashboard",
@@ -112,11 +297,26 @@ export default function AppShell({
   const [isMobileNavOpen, setIsMobileNavOpen] = useState(false);
   const [isLoggingOut, setIsLoggingOut] = useState(false);
   const [logoutError, setLogoutError] = useState("");
+  const [user, setUser] = useState(null);
   const mobileToggleRef = useRef(null);
   const desktopToggleRef = useRef(null);
   const firstNavigationLinkRef = useRef(null);
   const sidebarRef = useRef(null);
   const wasMobileNavOpenRef = useRef(false);
+
+  useEffect(() => {
+    let active = true;
+    fetchCurrentUser()
+      .then((currentUser) => {
+        if (active) setUser(currentUser);
+      })
+      .catch(() => {
+        if (active) setUser(null);
+      });
+    return () => {
+      active = false;
+    };
+  }, []);
 
   useEffect(() => {
     const desktopViewport = window.matchMedia("(min-width: 761px)");
@@ -254,7 +454,12 @@ export default function AppShell({
 
         <p className="sidebar-label">WORKSPACE</p>
         <nav className="primary-nav" aria-label="Primary navigation">
-          {navigationItems.map((item, index) => (
+          {navigationItems
+            .filter(
+              (item) =>
+                !item.adminOnly || user?.role === "admin",
+            )
+            .map((item, index) => (
             <Link
               className="nav-link"
               href={item.href}
@@ -279,7 +484,7 @@ export default function AppShell({
               <NavigationIcon name={item.icon} />
               <span className="nav-label">{item.label}</span>
             </Link>
-          ))}
+            ))}
         </nav>
 
         <div className="sidebar-footer">
@@ -349,7 +554,12 @@ export default function AppShell({
             <span className="topbar-context">{title}</span>
           </div>
           <div className="topbar-end">
-            <span className="workspace-label">Operations workspace</span>
+            <span className="workspace-label">
+              {user?.role === "admin"
+                ? "Platform admin"
+                : "Fleet operations workspace"}
+            </span>
+            <NotificationCenter />
             {logoutError && (
               <span className="logout-error" role="alert">
                 {logoutError}

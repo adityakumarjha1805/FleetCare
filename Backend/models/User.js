@@ -26,9 +26,20 @@ const userSchema = new mongoose.Schema(
     },
     role: {
       type: String,
-      enum: ['user'],
+      enum: [
+        'admin',
+        'user',
+        // Retained only so pre-migration documents can be read and migrated.
+        'organization_admin',
+        'fleet_manager',
+        'maintenance_staff',
+      ],
       default: 'user',
-      immutable: true,
+    },
+    organization: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'Organization',
+      default: null,
     },
     onboardingCompleted: {
       type: Boolean,

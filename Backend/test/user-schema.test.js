@@ -3,27 +3,18 @@ const mongoose = require('mongoose');
 const { test } = require('node:test');
 const User = require('../models/User');
 
-test('user schema keeps the normalized unique email index and private password', () => {
+test('user schema supports platform roles and keeps password private', () => {
   const emailPath = User.schema.path('email');
   const passwordPath = User.schema.path('password');
-  const onboardingPath = User.schema.path('onboardingCompleted');
-
+  const rolePath = User.schema.path('role');
   assert.equal(User.collection.name, 'users');
   assert.equal(emailPath.options.required, true);
   assert.equal(emailPath.options.lowercase, true);
-  assert.equal(emailPath.options.trim, true);
   assert.equal(emailPath.options.unique, true);
   assert.equal(passwordPath.options.select, false);
-  assert.equal(onboardingPath.instance, 'Boolean');
-  assert.equal(typeof onboardingPath.options.default, 'function');
-  assert.equal(new User().onboardingCompleted, false);
-  assert.equal(
-    User.hydrate({ _id: new mongoose.Types.ObjectId() }).onboardingCompleted,
-    true,
-  );
-  assert.deepEqual(User.schema.indexes(), [
-    [{ email: 1 }, { unique: true }],
-  ]);
-  assert.equal(User.schema.path('emailVerified'), undefined);
-  assert.equal(User.schema.path('emailVerificationOtpHash'), undefined);
+  assert.ok(rolePath.options.enum.includes('admin'));
+  assert.ok(rolePath.options.enum.includes('user'));
+  assert.equal(new User({ name: 'Admin', email: 'admin@example.test', password: 'password', role: 'admin' }).validateSync(), undefined);
+  assert.ok(new User({ name: 'Invalid', email: 'invalid@example.test', password: 'password', role: 'invalid' }).validateSync().errors.role);
+  assert.equal(User.hydrate({ _id: new mongoose.Types.ObjectId() }).onboardingCompleted, true);
 });

@@ -16,6 +16,23 @@ export async function fetchDiagnostics({ signal } = {}) {
   return assertDiagnostics(data);
 }
 
+export async function fetchDiagnosticProviderStatus({ signal } = {}) {
+  const data = await apiRequest("/diagnostics/provider-status", { signal });
+  const provider = data?.provider;
+  if (
+    !provider ||
+    (provider.provider !== "gemini" && provider.provider !== "mock") ||
+    typeof provider.configured !== "boolean"
+  ) {
+    throw new ApiError(
+      "The server returned an invalid diagnostic provider status.",
+      502,
+      "INVALID_RESPONSE",
+    );
+  }
+  return provider;
+}
+
 export async function createDiagnostic(diagnostic) {
   const data = await apiRequest("/diagnostics", {
     method: "POST",
@@ -61,6 +78,12 @@ export async function analyzeDiagnostic(id) {
     typeof analysis.explanation !== "string" ||
     !Array.isArray(analysis.possibleCauses) ||
     !Array.isArray(analysis.recommendedChecks) ||
+    !Array.isArray(analysis.recommendedInspectionSteps) ||
+    !Array.isArray(analysis.suggestedMaintenanceActions) ||
+    !Array.isArray(analysis.safetyWarnings) ||
+    typeof analysis.summary !== "string" ||
+    typeof analysis.confidenceLevel !== "string" ||
+    typeof analysis.limitationsAndDisclaimer !== "string" ||
     typeof analysis.recordedSeverity !== "string" ||
     typeof analysis.severityAssessment !== "string" ||
     typeof analysis.uncertainty !== "string" ||

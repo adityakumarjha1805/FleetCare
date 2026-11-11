@@ -1,7 +1,13 @@
 const express = require('express');
 const mongoose = require('mongoose');
 const authenticate = require('../middleware/authenticate');
+const { requireOperationalRole } = require('../middleware/authorize');
 const Vehicle = require('../models/Vehicle');
+const {
+  organizationFilter,
+  organizationValue,
+  withOrganizationFilter,
+} = require('../utils/organizationAccess');
 
 const router = express.Router();
 const editableFields = [
@@ -30,6 +36,12 @@ const odometerUnits = ['km', 'miles'];
 const healthStatuses = ['Healthy', 'Needs Attention', 'Critical'];
 
 router.use(authenticate);
+const readVehicleAccess = requireOperationalRole(
+  'user',
+);
+const writeVehicleAccess = requireOperationalRole(
+  'user',
+);
 
 function sendError(res, status, code, message) {
   return res.status(status).json({
@@ -184,7 +196,7 @@ function handleDuplicateRegistration(error, res, next) {
   return next(error);
 }
 
-router.post('/', async (req, res, next) => {
+router.post('/', writeVehicleAccess, async (req, res, next) => {
   const { values, error } = validateInput(req.body, { creating: true });
   if (error) {
     return sendError(res, 400, 'INVALID_VEHICLE', error);
@@ -194,6 +206,7 @@ router.post('/', async (req, res, next) => {
     const vehicle = await Vehicle.create({
       ...values,
       owner: req.user.id,
+      organization: organizationValue(req),
     });
     return res.status(201).json({
       success: true,
@@ -204,9 +217,9 @@ router.post('/', async (req, res, next) => {
   }
 });
 
-router.get('/', async (req, res, next) => {
+router.get('/', readVehicleAccess, async (req, res, next) => {
   try {
-    const vehicles = await Vehicle.find({ owner: req.user.id }).sort({ createdAt: -1 });
+    const vehicles = await Vehicle.find(organizationFilter(req)).sort({ createdAt: -1 });
     return res.json({
       success: true,
       data: { vehicles: vehicles.map(safeVehicle) },
@@ -216,16 +229,15 @@ router.get('/', async (req, res, next) => {
   }
 });
 
-router.get('/:id', async (req, res, next) => {
+router.get('/:id', readVehicleAccess, async (req, res, next) => {
   if (!mongoose.isValidObjectId(req.params.id)) {
     return invalidVehicleId(res);
   }
 
   try {
-    const vehicle = await Vehicle.findOne({
-      _id: req.params.id,
-      owner: req.user.id,
-    });
+    const vehicle = await Vehicle.findOne(
+      withOrganizationFilter(req, { _id: req.params.id }),
+    );
     if (!vehicle) {
       return notFound(res);
     }
@@ -238,7 +250,7 @@ router.get('/:id', async (req, res, next) => {
   }
 });
 
-router.put('/:id', async (req, res, next) => {
+router.put('/:id', writeVehicleAccess, async (req, res, next) => {
   if (!mongoose.isValidObjectId(req.params.id)) {
     return invalidVehicleId(res);
   }
@@ -250,7 +262,7 @@ router.put('/:id', async (req, res, next) => {
 
   try {
     const vehicle = await Vehicle.findOneAndUpdate(
-      { _id: req.params.id, owner: req.user.id },
+      withOrganizationFilter(req, { _id: req.params.id }),
       { $set: values },
       { new: true, runValidators: true },
     );
@@ -266,16 +278,15 @@ router.put('/:id', async (req, res, next) => {
   }
 });
 
-router.delete('/:id', async (req, res, next) => {
+router.delete('/:id', writeVehicleAccess, async (req, res, next) => {
   if (!mongoose.isValidObjectId(req.params.id)) {
     return invalidVehicleId(res);
   }
 
   try {
-    const vehicle = await Vehicle.findOneAndDelete({
-      _id: req.params.id,
-      owner: req.user.id,
-    });
+    const vehicle = await Vehicle.findOneAndDelete(
+      withOrganizationFilter(req, { _id: req.params.id }),
+    );
     if (!vehicle) {
       return notFound(res);
     }

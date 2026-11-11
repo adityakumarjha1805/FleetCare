@@ -25,9 +25,20 @@ function analyze(diagnostic) {
       explanation:
         'The development adapter has no reference for this code and cannot suggest a cause.',
       possibleCauses: [],
+      summary:
+        'The development adapter has no reference for this code and cannot suggest a cause.',
+      severity: diagnostic.severity,
       recommendedChecks: [
         'Ask a qualified mechanic to verify the code using the vehicle manufacturer’s service information.',
       ],
+      recommendedInspectionSteps: [
+        'Ask a qualified mechanic to verify the code using the vehicle manufacturer’s service information.',
+      ],
+      suggestedMaintenanceActions: [],
+      confidenceLevel: 'Low',
+      safetyWarnings: ['Do not operate an unsafe vehicle until it has been inspected.'],
+      limitationsAndDisclaimer:
+        'This is advisory information only, not a confirmed mechanical diagnosis.',
       recordedSeverity: diagnostic.severity,
       severityAssessment:
         'Severity is the value entered on the diagnostic record; this adapter does not independently assess it.',
@@ -44,7 +55,15 @@ function analyze(diagnostic) {
     title: knowledge.title,
     explanation: knowledge.explanation,
     possibleCauses: knowledge.possibleCauses,
+    summary: knowledge.explanation,
+    severity: diagnostic.severity,
     recommendedChecks: knowledge.recommendedChecks,
+    recommendedInspectionSteps: knowledge.recommendedChecks,
+    suggestedMaintenanceActions: [],
+    confidenceLevel: 'Low',
+    safetyWarnings: ['Stop driving and seek qualified help if warning signs worsen.'],
+    limitationsAndDisclaimer:
+      'This is advisory information only, not a confirmed mechanical diagnosis.',
     recordedSeverity: diagnostic.severity,
     severityAssessment:
       'This adapter does not independently assess severity or predict vehicle failure.',

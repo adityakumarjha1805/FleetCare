@@ -17,6 +17,12 @@ const diagnosticRecordSchema = new mongoose.Schema(
       required: true,
       immutable: true,
     },
+    organization: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'Organization',
+      default: null,
+      immutable: true,
+    },
     code: {
       type: String,
       required: true,
@@ -82,6 +88,7 @@ diagnosticRecordSchema.index({
   dateDetected: -1,
   createdAt: -1,
 });
+diagnosticRecordSchema.index({ organization: 1, dateDetected: -1 });
 
 module.exports =
   mongoose.models.DiagnosticRecord ||

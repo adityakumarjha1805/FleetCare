@@ -4,6 +4,15 @@ const authenticate = require('../middleware/authenticate');
 const MaintenanceRecord = require('../models/MaintenanceRecord');
 const Vehicle = require('../models/Vehicle');
 const { parseDateOnly, toDateOnly } = require('../utils/dateOnly');
+const { requireOperationalRole } = require('../middleware/authorize');
+const {
+  organizationValue,
+  withOrganizationFilter,
+} = require('../utils/organizationAccess');
+const {
+  createWorkflowNotifications,
+  platformRecipients,
+} = require('../services/notifications');
 
 const router = express.Router();
 const maintenanceTypes = [
@@ -25,6 +34,7 @@ const createFields = [
 ];
 
 router.use(authenticate);
+const maintenanceAccess = requireOperationalRole('user');
 
 function sendError(res, status, code, message) {
   return res.status(status).json({
@@ -146,17 +156,16 @@ function notFound(res) {
   return sendError(res, 404, 'NOT_FOUND', 'Maintenance record not found');
 }
 
-router.post('/', async (req, res, next) => {
+router.post('/', maintenanceAccess, async (req, res, next) => {
   const { values, error } = validateInput(req.body);
   if (error) {
     return sendError(res, 400, 'INVALID_MAINTENANCE', error);
   }
 
   try {
-    const vehicle = await Vehicle.findOne({
-      _id: values.vehicleId,
-      owner: req.user.id,
-    });
+    const vehicle = await Vehicle.findOne(
+      withOrganizationFilter(req, { _id: values.vehicleId }),
+    );
     if (!vehicle) {
       return sendError(res, 404, 'VEHICLE_NOT_FOUND', 'Vehicle not found');
     }
@@ -173,6 +182,7 @@ router.post('/', async (req, res, next) => {
       ...values,
       vehicle: vehicle._id,
       owner: req.user.id,
+      organization: organizationValue(req),
     });
     return res.status(201).json({
       success: true,
@@ -183,13 +193,13 @@ router.post('/', async (req, res, next) => {
   }
 });
 
-router.get('/', async (req, res, next) => {
-  const filter = { owner: req.user.id };
+router.get('/', maintenanceAccess, async (req, res, next) => {
+  let filter = withOrganizationFilter(req);
   if (req.query.vehicleId !== undefined) {
     if (!mongoose.isValidObjectId(req.query.vehicleId)) {
       return sendError(res, 400, 'INVALID_VEHICLE_ID', 'Vehicle ID is invalid');
     }
-    filter.vehicle = req.query.vehicleId;
+    filter = withOrganizationFilter(req, { vehicle: req.query.vehicleId });
   }
 
   try {
@@ -205,14 +215,13 @@ router.get('/', async (req, res, next) => {
   }
 });
 
-router.get('/:id', async (req, res, next) => {
+router.get('/:id', maintenanceAccess, async (req, res, next) => {
   if (!mongoose.isValidObjectId(req.params.id)) return invalidId(res);
 
   try {
-    const record = await MaintenanceRecord.findOne({
-      _id: req.params.id,
-      owner: req.user.id,
-    }).populate('vehicle', 'vehicleName registrationNumber');
+    const record = await MaintenanceRecord.findOne(
+      withOrganizationFilter(req, { _id: req.params.id }),
+    ).populate('vehicle', 'vehicleName registrationNumber');
     if (!record) return notFound(res);
     return res.json({
       success: true,
@@ -223,7 +232,7 @@ router.get('/:id', async (req, res, next) => {
   }
 });
 
-router.patch('/:id', async (req, res, next) => {
+router.patch('/:id', maintenanceAccess, async (req, res, next) => {
   if (!mongoose.isValidObjectId(req.params.id)) return invalidId(res);
   if (!isRecord(req.body) || Object.keys(req.body).length !== 1) {
     return sendError(
@@ -244,15 +253,24 @@ router.patch('/:id', async (req, res, next) => {
 
   try {
     const record = await MaintenanceRecord.findOneAndUpdate(
-      {
+      withOrganizationFilter(req, {
         _id: req.params.id,
-        owner: req.user.id,
         status: { $in: ['Upcoming', 'Overdue'] },
-      },
+      }),
       { $set: { status: 'Completed', completedAt: new Date() } },
       { new: true, runValidators: true },
     ).populate('vehicle', 'vehicleName registrationNumber');
     if (!record) return notFound(res);
+    const recipients = await platformRecipients(['admin'], req.user.id);
+    await createWorkflowNotifications({
+      recipientIds: recipients,
+      title: 'Maintenance completed',
+      message: `${record.vehicle?.vehicleName || 'A vehicle'} maintenance was marked completed.`,
+      type: 'maintenance',
+      relatedResourceType: 'MaintenanceRecord',
+      relatedResourceId: record._id,
+      dedupeKey: `maintenance-completed:${record._id}`,
+    });
     return res.json({
       success: true,
       data: { maintenance: safeMaintenance(record) },

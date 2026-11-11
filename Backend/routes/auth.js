@@ -36,15 +36,16 @@ function invalidCredentials(res) {
 }
 
 function safeUser(user) {
-  return {
+  const safe = {
     id: user._id.toString(),
     name: user.name,
     email: user.email,
-    role: user.role,
+    role: user.role === 'admin' ? 'admin' : 'user',
     onboardingCompleted: user.onboardingCompleted !== false,
     createdAt: user.createdAt,
     updatedAt: user.updatedAt,
   };
+  return safe;
 }
 
 function isRecord(value) {
@@ -68,7 +69,7 @@ function validPassword(password) {
 }
 
 function requestHasTrustedOrigin(req) {
-  return req.get('origin') === config.frontendOrigin;
+  return config.isAllowedFrontendOrigin(req.get('origin'));
 }
 
 function issueJwt(user) {
@@ -136,7 +137,7 @@ router.post('/register', registrationRateLimiter, async (req, res, next) => {
       name,
       email,
       password,
-      onboardingCompleted: false,
+      onboardingCompleted: true,
     });
     return res.status(201).json({
       success: true,

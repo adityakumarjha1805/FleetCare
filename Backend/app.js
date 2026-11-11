@@ -20,19 +20,14 @@ app.use((req, res, next) => {
 
 app.use(
   cors({
-     origin: (origin, callback) => {
-    const isProduction =
-      origin === config.frontendOrigin;
-
-    const isFleetCarePreview =
-      /^https:\/\/fleetcar-[a-z0-9-]+-team-aditya1\.vercel\.app$/.test(
-        origin || ''
-      );
-
-    if (!origin || isProduction || isFleetCarePreview) {
+    origin: (origin, callback) => {
+    if (config.isAllowedFrontendOrigin(origin)) {
       callback(null, true);
     } else {
-      callback(new Error('Origin not allowed by CORS'));
+      const error = new Error('Origin not allowed by CORS');
+      error.statusCode = 403;
+      error.code = 'CORS_ORIGIN_DENIED';
+      callback(error);
     }
   },
   methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],

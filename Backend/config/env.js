@@ -66,6 +66,43 @@ if (!Number.isInteger(port) || port < 1 || port > 65535) {
   throw new Error('PORT must be an integer between 1 and 65535');
 }
 
+function optionalBoolean(name, defaultValue) {
+  const value = process.env[name];
+  if (value === undefined || value.trim() === '') return defaultValue;
+  if (!['true', 'false'].includes(value.trim().toLowerCase())) {
+    throw new Error(`${name} must be true or false`);
+  }
+  return value.trim().toLowerCase() === 'true';
+}
+
+const geminiApiKey = process.env.GEMINI_API_KEY?.trim() || null;
+const geminiEnabled = optionalBoolean('GEMINI_ENABLED', true);
+const diagnosticAiProvider = (process.env.DIAGNOSTIC_AI_PROVIDER || '').trim().toLowerCase() ||
+  (geminiApiKey && geminiEnabled ? 'gemini' : 'mock');
+if (!['gemini', 'mock'].includes(diagnosticAiProvider)) {
+  throw new Error('DIAGNOSTIC_AI_PROVIDER must be gemini or mock');
+}
+if (diagnosticAiProvider === 'gemini' && !geminiApiKey) {
+  throw new Error('GEMINI_API_KEY is required when DIAGNOSTIC_AI_PROVIDER=gemini');
+}
+if (diagnosticAiProvider === 'gemini' && !geminiEnabled) {
+  throw new Error('GEMINI_ENABLED must be true when DIAGNOSTIC_AI_PROVIDER=gemini');
+}
+const configuredGeminiModel =
+  process.env.GEMINI_MODEL?.trim() || 'gemini-3.5-flash';
+const geminiModel =
+  configuredGeminiModel === 'gemini-2.5-flash'
+    ? 'gemini-3.5-flash'
+    : configuredGeminiModel;
+
+function isAllowedFrontendOrigin(origin) {
+  return (
+    !origin ||
+    origin === parsedFrontendOrigin.origin ||
+    /^https:\/\/fleetcare?-[a-z0-9-]+-team-aditya1\.vercel\.app$/.test(origin)
+  );
+}
+
 module.exports = Object.freeze({
   port,
   mongodbUri,
@@ -74,4 +111,9 @@ module.exports = Object.freeze({
   authCookieSameSite,
   authCookieSecure: isProduction,
   jwtSecret,
+  isAllowedFrontendOrigin,
+  geminiApiKey,
+  geminiEnabled,
+  diagnosticAiProvider,
+  geminiModel,
 });

@@ -2,7 +2,11 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import AppShell from "./app-shell";
-import { analyzeDiagnostic, fetchDiagnostics } from "../lib/diagnostics-api";
+import {
+  analyzeDiagnostic,
+  fetchDiagnosticProviderStatus,
+  fetchDiagnostics,
+} from "../lib/diagnostics-api";
 import { fetchVehicles } from "../lib/vehicles-api";
 
 function formatOdometer(value) {
@@ -31,6 +35,7 @@ function AnalysisSection({ title, children, className = "" }) {
 export default function AIDiagnosticAgent() {
   const [vehicles, setVehicles] = useState([]);
   const [diagnostics, setDiagnostics] = useState([]);
+  const [providerStatus, setProviderStatus] = useState(null);
   const [selectedVehicleId, setSelectedVehicleId] = useState("");
   const [selectedDiagnosticId, setSelectedDiagnosticId] = useState("");
   const [analysis, setAnalysis] = useState(null);
@@ -48,13 +53,16 @@ export default function AIDiagnosticAgent() {
       setIsLoading(true);
       setLoadError("");
       try {
-        const [loadedVehicles, loadedDiagnostics] = await Promise.all([
+        const [loadedVehicles, loadedDiagnostics, loadedProviderStatus] =
+          await Promise.all([
           fetchVehicles({ signal: controller.signal }),
           fetchDiagnostics({ signal: controller.signal }),
+          fetchDiagnosticProviderStatus({ signal: controller.signal }),
         ]);
         if (!controller.signal.aborted) {
           setVehicles(loadedVehicles);
           setDiagnostics(loadedDiagnostics);
+          setProviderStatus(loadedProviderStatus);
         }
       } catch (error) {
         if (!controller.signal.aborted) {
@@ -144,8 +152,8 @@ export default function AIDiagnosticAgent() {
               AI Diagnostic Agent
             </h1>
             <p className="ai-agent-description">
-              Review a saved trouble code with a provider-independent
-              development analysis and mechanic-review guidance.
+              Review a saved trouble code with advisory AI analysis and
+              mechanic-review guidance.
             </p>
           </div>
         </header>
@@ -155,9 +163,15 @@ export default function AIDiagnosticAgent() {
             i
           </span>
           <p>
-            <strong>No AI provider is approved.</strong> The backend currently
-            uses a safe mock adapter. Results are not AI diagnoses, and a DTC
-            does not confirm a faulty component or predict vehicle failure.
+            <strong>
+              {providerStatus?.provider === "gemini"
+                ? `Gemini AI is active (${providerStatus.model}).`
+                : "Development mock is active."}
+            </strong>{" "}
+            {providerStatus?.provider === "gemini"
+              ? "Results are advisory and must be reviewed by a qualified mechanic."
+              : "Configure Gemini on the backend to enable live advisory analysis."}{" "}
+            A DTC does not confirm a faulty component or predict vehicle failure.
           </p>
         </aside>
 
@@ -269,7 +283,7 @@ export default function AIDiagnosticAgent() {
           </div>
 
           <p className="ai-agent-form-note" id="agent-diagnostic-help-note">
-            Analysis uses the development mock adapter and does not create
+            Analysis uses the active backend provider and does not create
             maintenance records or perform external actions.
           </p>
         </section>
@@ -334,7 +348,7 @@ export default function AIDiagnosticAgent() {
             <h2>No analysis yet</h2>
             <p>
               Select a vehicle and saved diagnostic record above, then analyze
-              to see a development response and recommended checks.
+              to see a               advisory response and recommended checks.
             </p>
           </section>
         )}
@@ -347,7 +361,11 @@ export default function AIDiagnosticAgent() {
           >
             <div className="ai-agent-results-header">
               <div>
-                <p className="eyebrow">DEVELOPMENT MOCK RESPONSE</p>
+                <p className="eyebrow">
+                  {analysis.result.provider === "gemini"
+                    ? "GEMINI AI ADVISORY RESPONSE"
+                    : "DEVELOPMENT MOCK RESPONSE"}
+                </p>
                 <h2 id="analysis-results-title">Diagnostic review</h2>
                 <p>
                   {analyzedVehicle.vehicleName} ·{" "}
@@ -397,7 +415,7 @@ export default function AIDiagnosticAgent() {
                   </div>
                   <div className="agent-code-explanation">
                     <h4>{analysis.result.title}</h4>
-                    <p>{analysis.result.explanation}</p>
+                    <p>{analysis.result.summary}</p>
                   </div>
                 </AnalysisSection>
 
@@ -452,6 +470,29 @@ export default function AIDiagnosticAgent() {
                   </p>
                 </AnalysisSection>
 
+                <AnalysisSection title="Confidence and safety">
+                  <p className="agent-result-copy">
+                    Confidence: {analysis.result.confidenceLevel}
+                  </p>
+                  <ul className="agent-result-list">
+                    {analysis.result.safetyWarnings.map((warning) => (
+                      <li key={warning}>{warning}</li>
+                    ))}
+                  </ul>
+                </AnalysisSection>
+
+                <AnalysisSection title="Suggested maintenance actions">
+                  <ul className="agent-result-list">
+                    {analysis.result.suggestedMaintenanceActions.length > 0 ? (
+                      analysis.result.suggestedMaintenanceActions.map((action) => (
+                        <li key={action}>{action}</li>
+                      ))
+                    ) : (
+                      <li>No maintenance action is suggested by this provider.</li>
+                    )}
+                  </ul>
+                </AnalysisSection>
+
                 <AnalysisSection title="Recommended next steps">
                   <ol className="agent-result-list agent-ordered-list">
                     {analysis.result.recommendedChecks.map((check) => (
@@ -482,12 +523,12 @@ export default function AIDiagnosticAgent() {
             </div>
 
             <p className="agent-results-disclaimer">
-              Safe mock response only; no live AI model was called. A
-              diagnostic trouble code indicates a possible issue and does not
-              confirm a faulty component or predict failure. A qualified
-              mechanic must review findings and a human must approve any
-              external action. This workflow does not book services or order
-              parts.
+              {analysis.result.provider === "mock"
+                ? "Development mock response only; no live AI model was called. "
+                : ""}
+              {analysis.result.limitationsAndDisclaimer} A qualified mechanic
+              must review findings and a human must approve any external
+              action. This workflow does not book services or order parts.
             </p>
           </section>
         )}

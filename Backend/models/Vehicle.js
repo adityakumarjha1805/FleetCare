@@ -63,11 +63,18 @@ const vehicleSchema = new mongoose.Schema(
       required: true,
       immutable: true,
     },
+    organization: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'Organization',
+      default: null,
+      immutable: true,
+    },
   },
   { timestamps: true },
 );
 
 vehicleSchema.index({ owner: 1, registrationNumber: 1 }, { unique: true });
+vehicleSchema.index({ organization: 1, createdAt: -1 });
 
 module.exports =
   mongoose.models.Vehicle || mongoose.model('Vehicle', vehicleSchema);

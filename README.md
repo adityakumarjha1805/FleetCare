@@ -2,8 +2,9 @@
 
 FleetCare is a fleet maintenance and diagnostic MVP for managing vehicles,
 recording diagnostics, tracking maintenance, and submitting service requests.
-The AI diagnostic workflow is a limited development mock, not a live AI
-integration. This project is not production-ready.
+The AI diagnostic workflow supports Google's Gemini Flash for advisory analysis
+and retains an explicit development mock fallback. This project is not
+production-ready.
 
 ## Architecture and technology
 
@@ -13,9 +14,10 @@ integration. This project is not production-ready.
 - Authentication: JWT in an HttpOnly cookie for browser sessions; bearer
   tokens are also accepted for non-browser API clients.
 
-The frontend calls the Express API under `/api`. Protected API records are
-scoped to the authenticated user. Organization memberships and organization-
-wide access are not implemented.
+The frontend calls the Express API under `/api`. The platform has two roles:
+`admin` for global administration and `user` for owner-scoped fleet use.
+Organization fields remain in stored documents during migration for data
+preservation, but no API requires organization membership.
 
 ## Local development
 
@@ -41,6 +43,12 @@ Set these variables in `Backend\.env`:
 | `JWT_SECRET` | Required | JWT signing secret; provide a random secret of at least 32 bytes |
 | `PORT` | Optional; defaults to `5000` | Backend listening port |
 | `AUTH_COOKIE_SAME_SITE` | Optional; defaults to `Lax` in development and `None` in production | Cookie SameSite policy; `None` requires production HTTPS |
+| `ADMIN_EMAIL` | Bootstrap only | Admin email for the protected bootstrap script |
+| `ADMIN_PASSWORD` | Bootstrap only | Admin password; never expose in frontend configuration |
+| `GEMINI_ENABLED` | Optional; defaults to `true` | Enables Gemini when a backend key is present |
+| `DIAGNOSTIC_AI_PROVIDER` | Optional; defaults to Gemini when configured, otherwise `mock` | Explicitly select `gemini` or `mock` |
+| `GEMINI_MODEL` | Optional; defaults to `gemini-3.5-flash` | Gemini model used by the backend |
+| `GEMINI_API_KEY` | Required for Gemini | Google AI API key; backend-only and never returned to clients |
 
 `Backend\.env.example` provides placeholders for local development. Do not
 commit `.env` or put secrets in frontend variables.
@@ -102,9 +110,17 @@ relying on those limits across multiple instances.
 
 - **Authentication:** registration creates an account and directs the user to
   sign in. Password login issues an HttpOnly JWT cookie; protected pages check
-  the session through `/api/auth/me`. Sign out clears the cookie; there is no
-  server-side token revocation endpoint, so a copied JWT remains valid until
-  expiry.
+  the session through `/api/auth/me`. New accounts are normal users. Sign out
+  clears the cookie; there is no server-side token revocation endpoint.
+- **Platform administration:** admins use `/admin` and `/api/admin/*` for
+  global user and record statistics. Run `npm --prefix Backend
+  run bootstrap-admin` with deployment-time `ADMIN_EMAIL` and
+  `ADMIN_PASSWORD`; it refuses to modify an existing account.
+- **Legacy platform migration:** the migration preserves organization
+  collections and fields while filling missing owners only when an existing
+  owner, vehicle owner, or exactly one organization member proves the
+  relationship. Parts are a global catalog and diagnostic AI analysis is not
+  persisted as a separate collection.
 - **Vehicles:** authenticated users can create and list their own vehicle
   records persisted in MongoDB. The backend also has vehicle detail, update,
   and delete endpoints; the current frontend vehicle screen does not expose
@@ -112,13 +128,20 @@ relying on those limits across multiple instances.
 - **Diagnostics:** users can record and resolve diagnostic records for their
   own vehicles. A trouble code is recorded information, not a confirmed
   component failure.
-- **AI diagnostic analysis:** a backend provider-independent boundary uses a
-  limited mock adapter. No live AI provider/model or external AI credentials
-  are configured, and analysis is not persisted.
+- **AI diagnostic analysis:** the backend provider boundary uses the official
+  `@google/genai` SDK with configurable `gemini-3.5-flash` by default.
+  Gemini output is treated as untrusted, validated, bounded, and returned as
+  advisory structured JSON. The mock adapter remains an explicit development
+  fallback; analysis is not persisted and cannot modify fleet data or trigger
+  external actions.
 - **Maintenance:** maintenance records are persisted and can be marked
   completed as a user-reported action.
-- **Service requests:** requests are persisted and have owner-scoped status
-  transitions. They do not contact or book an external provider.
+- **Service requests:** requests are persisted with owner-scoped access. They
+  do not contact or book an external provider.
+- **Parts:** the backend provides a seeded sample catalog, owner-scoped parts
+  requests, diagnostic-based suggestions, and admin review.
+  Supplier inventory, purchasing, payments, and order confirmations are not
+  integrated.
 - **Dashboard:** displayed fleet, diagnostic, and maintenance summaries use
   saved records; they are not telematics-derived analytics.
 
@@ -156,7 +179,29 @@ before running the suite; the test command is not read-only.
   termination, HSTS, database network restrictions, and secret management
   still require deployment configuration.
 - There is no live AI provider, telematics hardware integration, external
-  service-provider booking, spare-parts ordering, or organization-wide access.
+  service-provider booking, or spare-parts ordering. Supplier inventory and
+  purchasing are not integrated.
+- Run `npm --prefix Backend run migrate-platform` before relying on migrated
+  records. Always run the dry-run first:
+
+  ```powershell
+  npm --prefix Backend run migrate-platform:dry-run
+  ```
+
+  After reviewing the JSON report and taking a database backup, apply it:
+
+  ```powershell
+  npm --prefix Backend run migrate-platform
+  npm --prefix Backend run verify-platform-migration
+  ```
+
+  The migration is re-runnable, does not delete records, and reports
+  ambiguous or unmapped ownership rather than guessing. Before either
+  command, create and verify a MongoDB backup or snapshot and record the
+  database name and backup timestamp. Run against a staging clone first.
+  To recover, stop the application, preserve the migration JSON output, and
+  restore the verified pre-migration backup or snapshot; do not manually
+  delete organization fields or collections.
 - Service request statuses are owner-managed workflow values, not provider
   approval or booking confirmation.
 

@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import AppShell from "../components/app-shell";
+import { fetchCurrentUser } from "../lib/auth-api";
 import { fetchDiagnostics } from "../lib/diagnostics-api";
 import { fetchMaintenance } from "../lib/maintenance-api";
 import { fetchVehicles } from "../lib/vehicles-api";
@@ -136,6 +137,21 @@ export default function Home() {
     maintenance: "",
   });
   const [reloadVersion, setReloadVersion] = useState(0);
+  const [user, setUser] = useState(null);
+
+  useEffect(() => {
+    let active = true;
+    fetchCurrentUser()
+      .then((currentUser) => {
+        if (active) setUser(currentUser);
+      })
+      .catch(() => {
+        if (active) setUser(null);
+      });
+    return () => {
+      active = false;
+    };
+  }, []);
 
   function retryDashboardLoad() {
     setIsLoading(true);
@@ -238,6 +254,10 @@ export default function Home() {
             : "violet",
     })),
   ];
+  const dashboardTitle = "Fleet Dashboard";
+  const dashboardDescription =
+    "Monitor fleet health, stay ahead of maintenance, and keep every vehicle moving.";
+  const primaryAction = { href: "/vehicles", label: "Add Vehicle" };
 
   return (
     <AppShell title="Fleet overview" showPageHeading={false}>
@@ -245,21 +265,20 @@ export default function Home() {
         <section className="dashboard-intro" aria-labelledby="dashboard-title">
           <div>
             <h1 className="page-heading dashboard-title" id="dashboard-title">
-              Fleet Dashboard
+              {dashboardTitle}
             </h1>
             <p className="eyebrow">YOUR FLEET WORKSPACE</p>
             <p className="dashboard-description">
-              Monitor fleet health, stay ahead of maintenance, and keep every
-              vehicle moving.
+              {dashboardDescription}
             </p>
             <p className="mock-data-note">
               Fleet metrics and activity reflect your saved vehicle,
               diagnostic, and maintenance records.
             </p>
           </div>
-          <Link className="primary-action" href="/vehicles">
+          <Link className="primary-action" href={primaryAction.href}>
             <DashboardIcon name="plus" />
-            <span>Add Vehicle</span>
+            <span>{primaryAction.label}</span>
           </Link>
         </section>
 

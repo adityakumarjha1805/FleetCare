@@ -706,7 +706,7 @@ export default function VehicleManagement() {
               >
                 {statusOptions.map((status) => (
                   <option key={status} value={status}>
-                    {status === "All" ? "All statuses" : status}
+                    {status === "All" ? "All status" : status}
                   </option>
                 ))}
               </select>

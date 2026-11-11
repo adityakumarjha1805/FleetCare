@@ -1,9 +1,15 @@
 const express = require('express');
+const crypto = require('node:crypto');
 const mongoose = require('mongoose');
 const authenticate = require('../middleware/authenticate');
 const DiagnosticRecord = require('../models/DiagnosticRecord');
 const Vehicle = require('../models/Vehicle');
 const diagnosticAnalysisService = require('../services/diagnosticAnalysisService');
+const { requireOperationalRole } = require('../middleware/authorize');
+const {
+  organizationValue,
+  withOrganizationFilter,
+} = require('../utils/organizationAccess');
 
 const router = express.Router();
 const diagnosticCodePattern =
@@ -23,6 +29,12 @@ const createFields = [
 ];
 
 router.use(authenticate);
+const readDiagnosticAccess = requireOperationalRole(
+  'user',
+);
+const manageDiagnosticAccess = requireOperationalRole(
+  'user',
+);
 
 function sendError(res, status, code, message) {
   return res.status(status).json({
@@ -209,17 +221,23 @@ function notFound(res) {
   return sendError(res, 404, 'NOT_FOUND', 'Diagnostic record not found');
 }
 
-router.post('/', async (req, res, next) => {
+function requestIdFor(req) {
+  const supplied = req.get('x-request-id');
+  return supplied && /^[A-Za-z0-9._:-]{1,128}$/.test(supplied)
+    ? supplied
+    : crypto.randomUUID();
+}
+
+router.post('/', manageDiagnosticAccess, async (req, res, next) => {
   const { values, error } = validateCreateInput(req.body);
   if (error) {
     return sendError(res, 400, 'INVALID_DIAGNOSTIC', error);
   }
 
   try {
-    const vehicle = await Vehicle.findOne({
-      _id: values.vehicleId,
-      owner: req.user.id,
-    });
+    const vehicle = await Vehicle.findOne(
+      withOrganizationFilter(req, { _id: values.vehicleId }),
+    );
     if (!vehicle) {
       return sendError(res, 404, 'VEHICLE_NOT_FOUND', 'Vehicle not found');
     }
@@ -236,6 +254,7 @@ router.post('/', async (req, res, next) => {
       ...values,
       vehicle: vehicle._id,
       owner: req.user.id,
+      organization: organizationValue(req),
       status: 'Active',
     });
 
@@ -248,8 +267,8 @@ router.post('/', async (req, res, next) => {
   }
 });
 
-router.get('/', async (req, res, next) => {
-  const filter = { owner: req.user.id };
+router.get('/', readDiagnosticAccess, async (req, res, next) => {
+  let filter = withOrganizationFilter(req);
   if (req.query.vehicleId !== undefined) {
     if (!mongoose.isValidObjectId(req.query.vehicleId)) {
       return sendError(
@@ -259,7 +278,7 @@ router.get('/', async (req, res, next) => {
         'Vehicle ID is invalid',
       );
     }
-    filter.vehicle = req.query.vehicleId;
+    filter = withOrganizationFilter(req, { vehicle: req.query.vehicleId });
   }
 
   try {
@@ -275,16 +294,22 @@ router.get('/', async (req, res, next) => {
   }
 });
 
-router.post('/:id/analyze', async (req, res, next) => {
+router.get('/provider-status', readDiagnosticAccess, (req, res) => {
+  return res.json({
+    success: true,
+    data: { provider: diagnosticAnalysisService.providerStatus },
+  });
+});
+
+router.post('/:id/analyze', manageDiagnosticAccess, async (req, res, next) => {
   if (!mongoose.isValidObjectId(req.params.id)) {
     return invalidDiagnosticId(res);
   }
 
   try {
-    const record = await DiagnosticRecord.findOne({
-      _id: req.params.id,
-      owner: req.user.id,
-    }).populate(
+    const record = await DiagnosticRecord.findOne(
+      withOrganizationFilter(req, { _id: req.params.id }),
+    ).populate(
       'vehicle',
       'vehicleName registrationNumber make model year vehicleType',
     );
@@ -292,39 +317,50 @@ router.post('/:id/analyze', async (req, res, next) => {
       return notFound(res);
     }
 
-    const analysis = await diagnosticAnalysisService.analyzeDiagnostic({
-      code: record.code,
-      description: record.description,
-      severity: record.severity,
-      vehicle: record.vehicle
-        ? {
-            make: record.vehicle.make,
-            model: record.vehicle.model,
-            year: record.vehicle.year,
-            vehicleType: record.vehicle.vehicleType,
-          }
-        : null,
-    });
+    const analysis = await diagnosticAnalysisService.analyzeDiagnostic(
+      {
+        code: record.code,
+        description: record.description,
+        source: record.source,
+        severity: record.severity,
+        status: record.status,
+        dateDetected: record.dateDetected,
+        odometer: record.odometer,
+        odometerUnit: record.odometerUnit,
+        notes: record.notes,
+        vehicle: record.vehicle
+          ? {
+              make: record.vehicle.make,
+              model: record.vehicle.model,
+              year: record.vehicle.year,
+              vehicleType: record.vehicle.vehicleType,
+            }
+          : null,
+      },
+      { requestId: requestIdFor(req) },
+    );
 
     return res.json({
       success: true,
       data: { analysis },
     });
   } catch (error) {
+    if (error?.statusCode && error?.code?.startsWith('AI_')) {
+      return sendError(res, error.statusCode, error.code, error.message);
+    }
     return next(error);
   }
 });
 
-router.get('/:id', async (req, res, next) => {
+router.get('/:id', readDiagnosticAccess, async (req, res, next) => {
   if (!mongoose.isValidObjectId(req.params.id)) {
     return invalidDiagnosticId(res);
   }
 
   try {
-    const record = await DiagnosticRecord.findOne({
-      _id: req.params.id,
-      owner: req.user.id,
-    }).populate('vehicle', 'vehicleName registrationNumber');
+    const record = await DiagnosticRecord.findOne(
+      withOrganizationFilter(req, { _id: req.params.id }),
+    ).populate('vehicle', 'vehicleName registrationNumber');
     if (!record) {
       return notFound(res);
     }
@@ -337,7 +373,7 @@ router.get('/:id', async (req, res, next) => {
   }
 });
 
-router.patch('/:id', async (req, res, next) => {
+router.patch('/:id', manageDiagnosticAccess, async (req, res, next) => {
   if (!mongoose.isValidObjectId(req.params.id)) {
     return invalidDiagnosticId(res);
   }
@@ -360,7 +396,10 @@ router.patch('/:id', async (req, res, next) => {
 
   try {
     const record = await DiagnosticRecord.findOneAndUpdate(
-      { _id: req.params.id, owner: req.user.id, status: 'Active' },
+      withOrganizationFilter(req, {
+        _id: req.params.id,
+        status: 'Active',
+      }),
       { $set: { status: 'Resolved' } },
       { new: true, runValidators: true },
     ).populate('vehicle', 'vehicleName registrationNumber');

@@ -13,6 +13,12 @@ const serviceRequestSchema = new mongoose.Schema(
       required: true,
       immutable: true,
     },
+    organization: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'Organization',
+      default: null,
+      immutable: true,
+    },
     serviceType: {
       type: String,
       required: true,
@@ -63,6 +69,7 @@ const serviceRequestSchema = new mongoose.Schema(
 
 serviceRequestSchema.index({ owner: 1, requestedDate: -1 });
 serviceRequestSchema.index({ owner: 1, status: 1, preferredDate: 1 });
+serviceRequestSchema.index({ organization: 1, status: 1, preferredDate: 1 });
 
 module.exports =
   mongoose.models.ServiceRequest ||

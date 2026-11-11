@@ -88,11 +88,7 @@ export default function AuthPage({ mode }) {
         email: values.email.trim().toLowerCase(),
         password: values.password,
       });
-      router.replace(
-        user.onboardingCompleted
-          ? returnPath || "/dashboard"
-          : "/onboarding",
-      );
+      router.replace(returnPath || (user.role === "admin" ? "/admin" : "/dashboard"));
     } catch (requestError) {
       setError(getAuthErrorMessage(requestError));
     } finally {

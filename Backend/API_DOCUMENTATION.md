@@ -21,6 +21,11 @@ is not a proposal for endpoints that do not yet exist.
   optional `PORT` and `AUTH_COOKIE_SAME_SITE` from its environment. `PORT`
   defaults to `5000`; cookie SameSite defaults to `Lax` in development and
   `None` in production to support separately hosted frontend and API projects.
+  Gemini analysis reads `GEMINI_API_KEY` only in the backend. `GEMINI_ENABLED`
+  defaults to `true`, `DIAGNOSTIC_AI_PROVIDER` selects `gemini` or `mock`, and
+  `GEMINI_MODEL` defaults to `gemini-3.5-flash`. The retired
+  `gemini-2.5-flash` value is upgraded to `gemini-3.5-flash` for compatibility
+  with existing backend environments.
   Production cookies remain `Secure` and `HttpOnly`; unsafe cookie-authenticated
   requests require the configured frontend origin.
 - The frontend API uses `NEXT_PUBLIC_API_URL`, defaulting to
@@ -31,7 +36,7 @@ is not a proposal for endpoints that do not yet exist.
   explicitly disabled.
 - Express accepts JSON request bodies up to 1 MB. CORS allows the configured
   frontend origin, credentials, and the `Content-Type` and `Authorization`
-  headers.
+  headers. Rejected origins return `403` and are never added to the allowlist.
 
 ## Endpoint summary
 
@@ -472,14 +477,39 @@ the provider name, whether the code is supported, possible causes,
 recommended checks, the user-recorded severity, uncertainty, required
 mechanic review, and a human-approval requirement for external actions.
 
-No AI provider or model has been approved. The current backend uses a
-provider-independent service interface with a safe mock adapter; no external
-AI service or API key is configured. The mock adapter contains only a limited
-reference for `P0301`. Other codes return an explicit unsupported result with
-no inferred causes. Provider failures are propagated to centralized error
-handling and do not produce a success-shaped fallback. The frontend displays
-this as a development mock response and no analysis result is persisted.
+When configured, the backend uses Google's official `@google/genai` SDK and
+the configured `GEMINI_MODEL` (default `gemini-3.5-flash`). Gemini output is
+treated as untrusted and validated before it is returned. It includes a
+summary, possible causes, severity, inspection steps, suggested maintenance
+actions, confidence, safety warnings, and limitations/disclaimer. Provider
+timeouts, quota/rate limits, malformed or blocked responses, and outages
+return an error; they do not produce a success-shaped mock fallback. When
+Gemini is not configured, the explicit mock adapter is used for development
+and testing. No analysis result is persisted, and this workflow cannot book
+services, order parts, or modify fleet records.
 Bookings, purchases, and other external actions are not available.
+
+### `GET /api/diagnostics/provider-status`
+
+Returns the active provider without exposing configuration secrets:
+
+```json
+{
+  "success": true,
+  "data": {
+    "provider": {
+      "provider": "gemini",
+      "configured": true,
+      "model": "gemini-3.5-flash"
+    }
+  }
+}
+```
+
+If Gemini is not configured, `provider` is `mock` and `configured` is
+`false`. The mock is an explicit development/testing fallback. It is not used
+when a configured Gemini request fails; provider errors return a failure
+response instead.
 
 ## Maintenance
 
@@ -708,6 +738,7 @@ call:
 - `PUT /api/service-requests/:id` when a pending request is edited.
 - `PATCH /api/service-requests/:id` when its status changes.
 - `DELETE /api/service-requests/:id` when a pending request is cancelled.
+- `GET /api/reports/summary` when the Reports & Analytics date range is applied.
 
 Browser requests include credentials so the HttpOnly cookie is sent. The
 vehicle form maps its UI fields to the backend contract (`name` to `vehicleName`,
@@ -723,6 +754,98 @@ call the vehicle detail, update, or delete endpoints. Diagnostic capture, AI
 mock analysis, maintenance, and service requests are connected to backend APIs.
 Parts, telematics hardware, and external booking/provider integrations do not
 exist. Dashboard vehicle totals and health distribution use saved vehicles;
+
+### `GET /api/reports/summary`
+
+This endpoint is available to authenticated `admin` and `user` accounts.
+Admins receive platform-wide metrics; normal users receive metrics for their
+own records.
+Optional `from` and `to` query parameters use `YYYY-MM-DD` dates and apply to
+diagnostic detection dates, maintenance dates, service request dates, and parts
+request creation dates. Vehicle totals and status distribution remain
+organization-wide for admins and owner-scoped for normal users.
+
+The response includes vehicle totals/status, diagnostic totals/severity,
+maintenance totals/status/monthly trends, service request status, and parts
+request status. Maintenance and parts costs are explicitly marked unavailable
+because the current schemas do not contain reliable recorded cost values; the
+API does not fabricate financial metrics.
+
+## Platform administration
+
+The organization routes are no longer mounted. Organization fields remain in
+existing MongoDB documents to preserve historical data, but operational APIs
+do not require organization membership.
+
+`admin` is the only global role. New registrations always create `user`
+accounts. Bootstrap the first admin only from a protected deployment shell:
+
+```powershell
+$env:ADMIN_EMAIL = "admin@example.com"
+$env:ADMIN_PASSWORD = "<secret supplied out of band>"
+npm --prefix Backend run bootstrap-admin
+```
+
+The script refuses to modify an existing account and hashes the password
+through the existing User model. Admin endpoints are mounted under
+`/api/admin` and require authenticated server-side admin authorization:
+
+- `GET /api/admin/summary`
+- `GET /api/admin/users`
+- `PATCH /api/admin/users/:id/role`
+- `GET /api/admin/vehicles`
+- `GET /api/admin/diagnostics`
+- `GET /api/admin/maintenance`
+- `GET /api/admin/serviceRequests`
+- `GET /api/admin/partsRequests`
+- `GET /api/admin/notifications`
+
+Run `npm --prefix Backend run migrate-platform` before production use. The
+migration maps legacy organization roles to `user`, preserves organization
+fields, and reports records that cannot be safely mapped to an owner or
+requester. It does not delete data or promote existing accounts to `admin`.
+
+### Safe migration and verification
+
+The migration scripts connect only when manually invoked. They must not be
+run against production without a verified backup and a staging rehearsal:
+
+```powershell
+npm --prefix Backend run migrate-platform:dry-run
+npm --prefix Backend run migrate-platform
+npm --prefix Backend run verify-platform-migration
+```
+
+The dry run performs no updates. Ownership is filled only from an existing
+owner/requester, an owned vehicle, or an organization with exactly one
+member. Ambiguous records and notifications without recipients are reported
+and left unchanged. Organization documents, organization fields, identifiers,
+and global parts catalog records are preserved. No separate persisted
+`aiAnalyses` collection exists in this application; diagnostic analysis is a
+non-persistent mock service.
+
+Create a MongoDB backup or snapshot before applying the migration and keep the
+dry-run/apply/verification JSON output. Recovery requires stopping writes and
+restoring the verified pre-migration backup; do not remove legacy collections
+manually.
+
+### First-admin bootstrap
+
+The bootstrap script is not a public API and must be run manually from a
+protected deployment shell. It creates an admin only when no admin exists and
+refuses both an existing admin and an existing normal account with the
+requested email:
+
+```powershell
+$env:ADMIN_EMAIL = "admin@example.com"
+$env:ADMIN_PASSWORD = "<secret supplied out of band>"
+$env:ADMIN_NAME = "FleetCare Admin"
+npm --prefix Backend run bootstrap-admin
+```
+
+`ADMIN_EMAIL`, `ADMIN_PASSWORD`, and optional `ADMIN_NAME` are read only by
+the script. Passwords are never logged, and password hashing is performed by
+the existing User model bcrypt hook.
 recent diagnostic activity and upcoming maintenance use their persisted
 records.
 
@@ -742,10 +865,9 @@ These are observations, not runtime changes:
    reserve `PUT` for replacement and use `PATCH` for partial changes.
 4. **Delete semantics:** vehicle deletion is permanent and returns the
    deleted object with `200`; no archived state exists.
-5. **Ownership scope:** records are scoped to individual users. There is no
-   Organization model or organization-wide access. Any future shared-access
-   behavior requires explicit product approval and a defined data/authorization
-   model.
+5. **Ownership scope:** records are organization-scoped for members and retain
+   owner scope for legacy users without an organization. Organization routes
+   enforce membership and role checks; parts requests use the same boundary.
 6. **Validation failures:** route-level vehicle input checks return `400`.
    A Mongoose validation error that escapes those checks (for example during
    an update) has no explicit mapping in the central middleware and can become
@@ -774,10 +896,27 @@ These are observations, not runtime changes:
 
 ## Product and development limitations
 
-- No live AI provider/model is configured. The analysis route uses a limited
-  development mock and does not persist analysis results.
-- No telematics hardware integration, external service-provider booking,
-  spare-parts ordering, or organization-wide access is implemented.
+## Notifications
+
+The authenticated notification endpoints are:
+
+- `GET /api/notifications` — list notifications for the current user.
+- `GET /api/notifications/unread-count` — return the unread count.
+- `PATCH /api/notifications/:id/read` — mark one owned notification as read.
+- `POST /api/notifications/read-all` — mark all owned notifications as read.
+
+Notifications are organization- and recipient-scoped. The backend creates
+deduplicated in-app notifications for new parts requests, parts request
+reviews, new service requests, service request status transitions, and
+completed maintenance. No email, SMS, or push integration is provided.
+
+- Gemini is used when configured and enabled; otherwise the explicit
+  development mock is active. Analysis results are validated and are not
+  persisted.
+- No telematics hardware integration, external service-provider booking, or
+  spare-parts ordering is implemented. The parts catalog and request workflow
+  are internal MVP functionality, and the frontend has no dedicated parts
+  screen.
 - Service-request statuses are owner-managed workflow state; they do not
   represent provider approval or booking confirmation.
 - A local Next.js development session previously reported that instant

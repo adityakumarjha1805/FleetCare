@@ -14,6 +14,12 @@ const maintenanceRecordSchema = new mongoose.Schema(
       required: true,
       immutable: true,
     },
+    organization: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'Organization',
+      default: null,
+      immutable: true,
+    },
     type: {
       type: String,
       required: true,
@@ -66,6 +72,7 @@ maintenanceRecordSchema.index({
   vehicle: 1,
   maintenanceDate: -1,
 });
+maintenanceRecordSchema.index({ organization: 1, maintenanceDate: 1 });
 
 module.exports =
   mongoose.models.MaintenanceRecord ||

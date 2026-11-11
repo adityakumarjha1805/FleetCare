@@ -60,7 +60,7 @@ async function authenticate(req, res, next) {
   if (
     authenticatedByCookie &&
     unsafeMethods.has(req.method) &&
-    req.get('origin') !== config.frontendOrigin
+    !config.isAllowedFrontendOrigin(req.get('origin'))
   ) {
     return forbidden(res);
   }
@@ -94,7 +94,7 @@ async function authenticate(req, res, next) {
       id: user._id.toString(),
       name: user.name,
       email: user.email,
-      role: user.role,
+      role: user.role === 'admin' ? 'admin' : 'user',
       onboardingCompleted: user.onboardingCompleted !== false,
       createdAt: user.createdAt,
       updatedAt: user.updatedAt,

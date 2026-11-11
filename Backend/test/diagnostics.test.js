@@ -4,6 +4,7 @@ const mongoose = require('mongoose');
 const { after, before, beforeEach, test } = require('node:test');
 
 process.env.JWT_SECRET = 'fleetcare-diagnostic-tests-use-a-32-byte-secret';
+process.env.DIAGNOSTIC_AI_PROVIDER = 'mock';
 
 const app = require('../app');
 const config = require('../config/env');

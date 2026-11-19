@@ -6575,3 +6575,459 @@ textarea:focus-visible,
     flex-direction: column;
   }
 }
+
+/* FleetCare Swiss Operational Command Desk overrides */
+:root {
+  --background: #f7f7f5;
+  --surface: #ffffff;
+  --foreground: #181816;
+  --muted: #8c8980;
+  --line: #e4e3dd;
+  --accent: #d9481e;
+  --accent-hover: #bf3b15;
+  --sidebar: #f7f7f5;
+  --sidebar-muted: #57554e;
+  --sidebar-hover: #f1f0ec;
+  --app-font: var(--font-jakarta), "Plus Jakarta Sans", Arial, sans-serif;
+  --mono-font: var(--font-jetbrains), "JetBrains Mono", monospace;
+}
+
+body {
+  background: #f7f7f5;
+  color: #181816;
+  font-family: var(--app-font);
+  font-feature-settings: "cv02", "cv03", "cv04", "cv11";
+}
+
+.mono,
+.overview-value,
+.diagnostic-code,
+.maintenance-table td,
+.service-request-table td,
+.report-summary-card strong,
+.health-summary,
+.row-label,
+.diagnostic-mobile-card time,
+.maintenance-mobile-heading,
+.service-request-mobile-heading {
+  font-family: var(--mono-font);
+  font-variant-numeric: tabular-nums;
+}
+
+.sidebar {
+  width: 240px;
+  flex-basis: 240px;
+  border-right: 1px solid #e4e3dd;
+  background: #f7f7f5;
+  color: #181816;
+  box-shadow: none;
+}
+
+.sidebar-header { min-height: 52px; border-bottom: 0; }
+.brand { color: #181816; font-size: 16px; }
+.brand-mark {
+  width: 32px;
+  height: 32px;
+  flex-basis: 32px;
+  border: 1px solid #f5c7b8;
+  border-radius: 4px;
+  background: #fef5f1;
+  color: #d9481e;
+}
+.brand-mark svg { width: 18px; height: 18px; }
+.sidebar-label {
+  margin: 20px 10px 8px;
+  color: #8c8980;
+  font-family: var(--mono-font);
+  font-size: 10px;
+}
+.nav-link {
+  position: relative;
+  min-height: 44px;
+  border: 0;
+  border-radius: 4px;
+  color: #57554e;
+  font-size: 13px;
+}
+.nav-link:hover { background: #f1f0ec; color: #181816; }
+.nav-link[aria-current="page"] {
+  border: 0;
+  background: #ebeae4;
+  color: #181816;
+  font-weight: 600;
+}
+.nav-link[aria-current="page"]::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  width: 2px;
+  height: 20px;
+  background: #d9481e;
+}
+.sidebar-footer {
+  border-top: 1px solid #e4e3dd;
+  color: #8c8980;
+  font-family: var(--mono-font);
+  font-size: 10px;
+}
+.sidebar-footer-mark { background: #0f766e; }
+
+.topbar {
+  min-height: 52px;
+  height: 52px;
+  padding: 0 24px;
+  border-bottom: 1px solid #e4e3dd;
+  background: #ffffff;
+}
+.topbar-context { color: #57554e; font-size: 12px; }
+.workspace-label {
+  border: 0;
+  border-radius: 0;
+  color: #8c8980;
+  font-family: var(--mono-font);
+  font-size: 10px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+.icon-button { width: 28px; height: 28px; border-radius: 4px; color: #8c8980; }
+.icon-button:hover { border: 1px solid #e4e3dd; background: #f1f0ec; color: #181816; }
+.logout-button {
+  min-height: 32px;
+  border: 1px solid #cfcbc2;
+  border-radius: 4px;
+  color: #181816;
+  font-size: 12px;
+}
+.notification-toggle { width: 28px; height: 28px; border-radius: 4px; }
+.notification-count { background: #d9481e; }
+.notification-panel {
+  border: 1px solid #cfcbc2;
+  border-radius: 6px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.06);
+}
+
+.main-content {
+  padding: 24px;
+  background: #f7f7f5;
+}
+.page-container { max-width: 1280px; }
+.page-heading {
+  margin: 0;
+  color: #181816;
+  font-size: 20px;
+  line-height: 24px;
+  letter-spacing: -0.02em;
+}
+
+.primary-action,
+.auth-submit,
+.btn-submit {
+  min-height: 32px;
+  height: 32px;
+  padding: 0 12px;
+  border: 1px solid #d9481e;
+  border-radius: 4px;
+  background: #d9481e;
+  color: #ffffff;
+  box-shadow: none;
+  font-size: 13px;
+  font-weight: 600;
+}
+.primary-action:hover,
+.auth-submit:hover:not(:disabled),
+.btn-submit:hover { background: #bf3b15; border-color: #bf3b15; }
+.primary-action:focus-visible,
+.auth-submit:focus-visible,
+.btn-submit:focus-visible { outline: 2px solid #d9481e; outline-offset: 2px; }
+
+.secondary-action,
+.text-action,
+.danger-action,
+.logout-button {
+  height: 32px;
+  min-height: 32px;
+  border: 1px solid #cfcbc2;
+  border-radius: 4px;
+  background: #ffffff;
+  color: #181816;
+  box-shadow: none;
+  font-size: 13px;
+  font-weight: 500;
+}
+.secondary-action:hover,
+.text-action:hover,
+.logout-button:hover { background: #f1f0ec; }
+.danger-action { border-color: #fecaca; background: #fef2f2; color: #b91c1c; }
+
+input,
+select,
+textarea,
+.auth-field input,
+.parts-filters input,
+.parts-filters select,
+.parts-review input,
+.parts-request-form input,
+.parts-request-form select,
+.parts-request-form textarea,
+.reports-filters input {
+  min-height: 36px;
+  border: 1px solid #cfcbc2;
+  border-radius: 4px;
+  background: #fafaf9;
+  color: #181816;
+  box-shadow: none;
+}
+input:focus,
+select:focus,
+textarea:focus,
+.auth-field input:focus {
+  border-color: #d9481e;
+  outline: 2px solid rgba(217, 72, 30, 0.18);
+  outline-offset: 0;
+  background: #ffffff;
+}
+
+.dashboard-page,
+.vehicle-page,
+.diagnostic-page,
+.maintenance-page,
+.service-request-page,
+.ai-agent-page,
+.parts-page,
+.reports-page,
+.admin-page { gap: 16px; }
+
+.dashboard-intro,
+.vehicle-list-heading,
+.diagnostic-list-heading,
+.maintenance-list-heading,
+.service-request-list-heading,
+.parts-hero,
+.reports-hero,
+.admin-hero,
+.ai-agent-header {
+  border: 1px solid #e4e3dd;
+  border-radius: 6px;
+  background: #ffffff;
+  box-shadow: none;
+}
+.dashboard-intro { min-height: 112px; padding: 20px 24px; }
+.dashboard-intro .dashboard-title { font-size: 20px; }
+.dashboard-description { color: #57554e; }
+.eyebrow,
+.dashboard-intro .eyebrow,
+.public-eyebrow {
+  color: #57554e;
+  font-family: var(--mono-font);
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.overview-card,
+.dashboard-panel,
+.vehicle-card,
+.diagnostic-summary-card,
+.maintenance-summary-card,
+.service-request-summary-card,
+.report-card,
+.report-summary-card,
+.parts-panel,
+.part-card,
+.parts-request-card,
+.admin-metric-card,
+.admin-panel-card {
+  border: 1px solid #e4e3dd;
+  border-radius: 6px;
+  background: #ffffff;
+  box-shadow: none;
+}
+.overview-grid,
+.diagnostic-summary-grid,
+.maintenance-summary-grid,
+.service-request-summary-grid,
+.admin-metric-grid { gap: 12px; }
+.overview-card { min-height: 108px; padding: 16px; }
+.overview-value { font-family: var(--mono-font); font-size: 28px; line-height: 28px; }
+.overview-label { color: #57554e; font-size: 11px; text-transform: uppercase; }
+.overview-icon { display: none; }
+
+.dashboard-panel-heading,
+.panel-heading-row,
+.diagnostic-list-heading,
+.maintenance-list-heading,
+.service-request-list-heading,
+.vehicle-list-heading {
+  border-bottom: 1px solid #e4e3dd;
+}
+.dashboard-panel { border-radius: 6px; }
+.dashboard-panel-heading { min-height: 64px; }
+.dashboard-panel h2,
+.diagnostic-list-heading h2,
+.maintenance-list-heading h2,
+.service-request-list-heading h2,
+.vehicle-list-heading h2 { font-size: 16px; }
+
+.diagnostic-row,
+.maintenance-row,
+.vehicle-card,
+.service-request-row {
+  min-height: 44px;
+  border-bottom: 1px solid #e4e3dd;
+  background: #ffffff;
+}
+.diagnostic-row:hover,
+.maintenance-row:hover,
+.vehicle-card:hover,
+.service-request-row:hover { background: #f1f0ec; }
+
+.dialog-backdrop {
+  background: rgba(24, 24, 22, 0.40);
+  backdrop-filter: none;
+}
+.dialog-shell,
+.vehicle-form,
+.dialog-card,
+.dialog-panel {
+  border: 1px solid #cfcbc2;
+  border-radius: 6px;
+  background: #ffffff;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.08);
+}
+.dialog-heading {
+  border-bottom: 1px solid #e4e3dd;
+}
+.dialog-heading h2 { font-size: 16px; }
+.dialog-actions { border-top: 1px solid #e4e3dd; }
+
+.auth-page {
+  background: #f7f7f5;
+}
+.auth-card {
+  width: min(100%, 360px);
+  padding: 0;
+  border: 1px solid #e4e3dd;
+  border-radius: 6px;
+  background: #ffffff;
+  box-shadow: none;
+  overflow: hidden;
+}
+.auth-brand {
+  display: flex;
+  min-height: 68px;
+  margin: 0;
+  padding: 16px 20px;
+  border-bottom: 1px solid #e4e3dd;
+  font-size: 15px;
+}
+.auth-brand-mark {
+  width: 32px;
+  height: 32px;
+  border: 1px solid #f5c7b8;
+  border-radius: 4px;
+  background: #fef5f1;
+  color: #d9481e;
+}
+.auth-heading { margin: 20px; }
+.auth-heading h1 { font-size: 20px; line-height: 25px; }
+.auth-heading .eyebrow { margin-bottom: 6px; }
+.auth-form { padding: 0 20px 20px; gap: 16px; }
+.auth-field label { font-size: 13px; }
+.auth-field input { height: 36px; }
+.auth-switch { padding: 0 20px 20px; }
+.auth-submit { width: 100%; height: 36px; }
+
+.public-landing { background: #f7f7f5; }
+.public-header { height: 52px; border-bottom: 1px solid #e4e3dd; background: #f7f7f5; }
+.public-nav { height: 52px; max-width: 1280px; }
+.public-brand-mark {
+  width: 32px;
+  height: 32px;
+  border: 1px solid #f5c7b8;
+  border-radius: 4px;
+  background: #fef5f1;
+  color: #d9481e;
+}
+.public-hero { min-height: 420px; background: #f7f7f5; }
+.public-hero-inner { max-width: 1280px; }
+.public-hero h1 { max-width: 620px; font-size: 40px; line-height: 44px; letter-spacing: -0.04em; }
+.public-hero-description { color: #57554e; }
+.public-button,
+.public-button-small {
+  min-height: 36px;
+  border: 1px solid #d9481e;
+  border-radius: 4px;
+  background: #d9481e;
+  box-shadow: none;
+}
+.public-button:hover { background: #bf3b15; }
+.public-button-secondary { border: 1px solid #cfcbc2; border-radius: 4px; background: #ffffff; }
+.public-preview-window,
+.public-feature-card,
+.public-final-cta {
+  border: 1px solid #e4e3dd;
+  border-radius: 6px;
+  box-shadow: none;
+}
+.public-feature-icon { border-radius: 4px; }
+.public-final-cta { background: #181816; }
+
+@media (max-width: 1279px) {
+  .sidebar { width: 200px; flex-basis: 200px; }
+}
+
+@media (max-width: 1023px) and (min-width: 768px) {
+  .sidebar { width: 64px; flex-basis: 64px; padding-inline: 12px; }
+  .brand-name,
+  .nav-label,
+  .sidebar-label,
+  .sidebar-footer-text { display: none; }
+  .sidebar-header { justify-content: center; }
+  .nav-link { justify-content: center; padding: 0; }
+  .nav-link[aria-current="page"]::before { height: 24px; }
+  .sidebar-footer { padding-inline: 0; text-align: center; }
+  .sidebar-footer-mark { margin: 0; }
+}
+
+@media (max-width: 767px) {
+  .sidebar { width: 240px; flex-basis: 240px; }
+  .topbar { min-height: 52px; height: 52px; padding: 0 12px; }
+  .workspace-label { display: none; }
+  .logout-button { padding: 0 8px; }
+  .main-content { padding: 16px 12px 32px; }
+  .dashboard-intro { min-height: auto; padding: 16px; }
+  .dashboard-intro { align-items: flex-start; flex-direction: column; }
+  .dashboard-intro .primary-action { width: 100%; margin-top: 12px; }
+  .overview-card { min-height: 92px; }
+  .public-hero { min-height: auto; }
+  .public-hero h1 { font-size: 32px; line-height: 36px; }
+  .public-header { padding: 0 12px; }
+  .public-nav-links { display: none; }
+  .public-nav-actions .public-signin { display: none; }
+}
+
+@media (max-width: 760px) {
+  .app-shell.mobile-nav-open .sidebar {
+    position: fixed;
+    z-index: 30;
+    transform: translateX(0) !important;
+    visibility: visible !important;
+  }
+
+  .app-shell:not(.mobile-nav-open) .sidebar {
+    transform: translateX(-105%) !important;
+    visibility: hidden !important;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    scroll-behavior: auto !important;
+    transition-duration: 0.01ms !important;
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+  }
+}

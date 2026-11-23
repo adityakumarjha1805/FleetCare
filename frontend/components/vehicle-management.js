@@ -73,7 +73,7 @@ function getRequestErrorMessage(error) {
     return error.message || "A vehicle with this registration number already exists.";
   }
   if (!error.status) {
-    return "Unable to connect to FleetCare. Check that the backend is running and try again.";
+    return "Unable to connect to Telfay. Check that the backend is running and try again.";
   }
   return error.message || "Unable to complete the vehicle request. Please try again.";
 }

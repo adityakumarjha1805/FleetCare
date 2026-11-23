@@ -3,7 +3,7 @@ import DiagnosticManagement from "../../components/diagnostic-management";
 export const instant = false;
 
 export const metadata = {
-  title: "Diagnostics | FleetCare",
+  title: "Diagnostics | Telfay",
   description:
     "Review vehicle diagnostic trouble codes and manage sample fleet fault records.",
 };

@@ -5,7 +5,7 @@ const { connectToDatabase } = require('../config/database');
 function readBootstrapInput(environment = process.env) {
   const email = environment.ADMIN_EMAIL?.trim().toLowerCase();
   const password = environment.ADMIN_PASSWORD;
-  const name = (environment.ADMIN_NAME || 'FleetCare Admin').trim();
+  const name = (environment.ADMIN_NAME || 'Telfay Admin').trim();
   if (!email || !password) {
     throw new Error('ADMIN_EMAIL and ADMIN_PASSWORD are required');
   }

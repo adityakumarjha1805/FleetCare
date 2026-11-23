@@ -115,24 +115,7 @@ function NavigationIcon({ name }) {
 }
 
 function BrandMark() {
-  return (
-    <span className="brand-mark" aria-hidden="true">
-      <svg viewBox="0 0 24 24" fill="none">
-        <path
-          d="M4 16.5h16l-1.7-6.2a2 2 0 0 0-1.9-1.5H7.6a2 2 0 0 0-1.9 1.5L4 16.5Z"
-          stroke="currentColor"
-          strokeWidth="1.7"
-          strokeLinejoin="round"
-        />
-        <path
-          d="M6 16.5v2m12-2v2M7.5 13h9"
-          stroke="currentColor"
-          strokeWidth="1.7"
-          strokeLinecap="round"
-        />
-      </svg>
-    </span>
-  );
+  return <span className="brand-mark" aria-hidden="true" />;
 }
 
 function notificationPath(notification) {
@@ -422,18 +405,18 @@ export default function AppShell({
         role={isMobileNavOpen ? "dialog" : undefined}
         aria-modal={isMobileNavOpen ? true : undefined}
         aria-label={
-          isMobileNavOpen ? "Primary navigation menu" : "FleetCare navigation"
+          isMobileNavOpen ? "Primary navigation menu" : "Telfay navigation"
         }
       >
         <div className="sidebar-header">
           <Link
             className="brand"
             href="/dashboard"
-            aria-label="FleetCare home"
+            aria-label="Telfay home"
             onClick={onNavigate}
           >
             <BrandMark />
-            <span className="brand-name">FleetCare</span>
+            <span className="brand-name">Telfay</span>
           </Link>
           <button
             className="sidebar-close"

@@ -18,7 +18,7 @@ async function requestAuth(path, body) {
     });
   } catch {
     throw new ApiError(
-      "Unable to reach FleetCare. Check your connection and try again.",
+      "Unable to reach Telfay. Check your connection and try again.",
       0,
       "NETWORK_ERROR",
     );

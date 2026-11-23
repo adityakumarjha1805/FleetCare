@@ -3,9 +3,9 @@ import ServiceRequestManagement from "../../components/service-request-managemen
 export const instant = false;
 
 export const metadata = {
-  title: "Service Requests | FleetCare",
+  title: "Service Requests | Telfay",
   description:
-    "Create and track fleet vehicle service requests with FleetCare.",
+    "Create and track fleet vehicle service requests with Telfay.",
 };
 
 export default function ServiceRequestsPage() {

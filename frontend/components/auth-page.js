@@ -99,24 +99,9 @@ export default function AuthPage({ mode }) {
   return (
     <main className="auth-page">
       <section className="auth-card" aria-labelledby="auth-title">
-        <Link className="auth-brand" href="/" aria-label="FleetCare">
-          <span className="auth-brand-mark" aria-hidden="true">
-            <svg viewBox="0 0 24 24" fill="none">
-              <path
-                d="M4 16.5h16l-1.7-6.2a2 2 0 0 0-1.9-1.5H7.6a2 2 0 0 0-1.9 1.5L4 16.5Z"
-                stroke="currentColor"
-                strokeWidth="1.7"
-                strokeLinejoin="round"
-              />
-              <path
-                d="M6 16.5v2m12-2v2M7.5 13h9"
-                stroke="currentColor"
-                strokeWidth="1.7"
-                strokeLinecap="round"
-              />
-            </svg>
-          </span>
-          <span>FleetCare</span>
+        <Link className="auth-brand" href="/" aria-label="Telfay">
+          <span className="auth-brand-mark" aria-hidden="true" />
+          <span>Telfay</span>
         </Link>
 
         <div className="auth-heading">
@@ -124,8 +109,8 @@ export default function AuthPage({ mode }) {
           <h1 id="auth-title">{isSignup ? "Create your account" : "Welcome back"}</h1>
           <p>
             {isSignup
-              ? "Set up your FleetCare account to manage your vehicles."
-              : "Sign in to continue to your FleetCare dashboard."}
+              ? "Set up your Telfay account to manage your vehicles."
+              : "Sign in to continue to your Telfay dashboard."}
           </p>
         </div>
 
@@ -208,7 +193,7 @@ export default function AuthPage({ mode }) {
         </form>
 
         <p className="auth-switch">
-          {isSignup ? "Already have an account?" : "New to FleetCare?"}{" "}
+          {isSignup ? "Already have an account?" : "New to Telfay?"}{" "}
           <Link href={isSignup ? "/login" : "/signup"}>
             {isSignup ? "Sign in" : "Create an account"}
           </Link>

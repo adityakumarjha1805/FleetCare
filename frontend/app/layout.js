@@ -13,8 +13,15 @@ const jetBrainsMono = JetBrains_Mono({
 });
 
 export const metadata = {
-  title: "Fleet Dashboard | FleetCare",
-  description: "Manage fleet maintenance and vehicle diagnostics with FleetCare.",
+  title: "Fleet Dashboard | Telfay",
+  description: "Manage fleet maintenance and vehicle diagnostics with Telfay.",
+  icons: {
+    icon: [
+      { url: "/icon.png", sizes: "512x512", type: "image/png" },
+      { url: "/favicon.ico", sizes: "16x16", type: "image/x-icon" },
+    ],
+    apple: [{ url: "/apple-icon.png", sizes: "180x180", type: "image/png" }],
+  },
 };
 
 export default function RootLayout({ children }) {

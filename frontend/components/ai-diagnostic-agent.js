@@ -147,7 +147,7 @@ export default function AIDiagnosticAgent() {
       <div className="ai-agent-page">
         <header className="ai-agent-header">
           <div>
-            <p className="eyebrow">FLEETCARE ASSISTANT</p>
+            <p className="eyebrow">TELFAY ASSISTANT</p>
             <h1 className="page-heading ai-agent-title">
               AI Diagnostic Agent
             </h1>

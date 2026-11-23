@@ -1,4 +1,4 @@
-# FleetCare API Documentation
+# Telfay API Documentation
 
 This document describes the behavior implemented in the current repository. It
 is not a proposal for endpoints that do not yet exist.
@@ -839,7 +839,7 @@ requested email:
 ```powershell
 $env:ADMIN_EMAIL = "admin@example.com"
 $env:ADMIN_PASSWORD = "<secret supplied out of band>"
-$env:ADMIN_NAME = "FleetCare Admin"
+$env:ADMIN_NAME = "Telfay Admin"
 npm --prefix Backend run bootstrap-admin
 ```
 

@@ -1,6 +1,6 @@
-# FleetCare
+# Telfay
 
-FleetCare is a fleet maintenance and diagnostic MVP for managing vehicles,
+Telfay is a fleet maintenance and diagnostic MVP for managing vehicles,
 recording diagnostics, tracking maintenance, and submitting service requests.
 The AI diagnostic workflow supports Google's Gemini Flash for advisory analysis
 and retains an explicit development mock fallback. This project is not

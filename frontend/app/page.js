@@ -1,7 +1,7 @@
 import Link from "next/link";
 
 export const metadata = {
-  title: "FleetCare | Fleet operations, made clearer",
+  title: "Telfay | Fleet operations, made clearer",
   description:
     "Manage vehicles, diagnostics, maintenance, and service requests in one clear fleet workspace.",
 };
@@ -40,24 +40,7 @@ const features = [
 ];
 
 function BrandMark() {
-  return (
-    <span className="public-brand-mark" aria-hidden="true">
-      <svg viewBox="0 0 24 24" fill="none">
-        <path
-          d="M4 16.5h16l-1.7-6.2a2 2 0 0 0-1.9-1.5H7.6a2 2 0 0 0-1.9 1.5L4 16.5Z"
-          stroke="currentColor"
-          strokeWidth="1.7"
-          strokeLinejoin="round"
-        />
-        <path
-          d="M6 16.5v2m12-2v2M7.5 13h9"
-          stroke="currentColor"
-          strokeWidth="1.7"
-          strokeLinecap="round"
-        />
-      </svg>
-    </span>
-  );
+  return <span className="public-brand-mark" aria-hidden="true" />;
 }
 
 function FeatureIcon({ name }) {
@@ -107,9 +90,9 @@ export default function HomePage() {
     <main className="public-landing">
       <header className="public-header">
         <nav className="public-nav" aria-label="Main navigation">
-          <Link className="public-brand" href="/" aria-label="FleetCare home">
+          <Link className="public-brand" href="/" aria-label="Telfay home">
             <BrandMark />
-            <span>FleetCare</span>
+            <span>Telfay</span>
           </Link>
           <div className="public-nav-links">
             <a href="#features">Features</a>
@@ -132,7 +115,7 @@ export default function HomePage() {
             <p className="public-eyebrow">A CLEARER WAY TO RUN YOUR FLEET</p>
             <h1>Keep your fleet moving, with everything in view.</h1>
             <p className="public-hero-description">
-              FleetCare brings vehicle management, diagnostics, maintenance,
+              Telfay brings vehicle management, diagnostics, maintenance,
               and service requests together in one straightforward workspace.
             </p>
             <div className="public-hero-actions">
@@ -150,7 +133,7 @@ export default function HomePage() {
             </p>
           </div>
 
-          <div className="public-hero-visual" aria-label="FleetCare workspace preview">
+          <div className="public-hero-visual" aria-label="Telfay workspace preview">
             <div className="public-preview-window">
               <div className="public-preview-top">
                 <span className="public-preview-dots" aria-hidden="true">
@@ -247,7 +230,7 @@ export default function HomePage() {
               <h3>{feature.title}</h3>
               <p>{feature.description}</p>
               <span className="public-feature-link">
-                Explore in FleetCare <span aria-hidden="true">→</span>
+                Explore in Telfay <span aria-hidden="true">→</span>
               </span>
             </Link>
           ))}
@@ -263,7 +246,7 @@ export default function HomePage() {
             your team.
           </p>
           <Link className="public-text-link" href="/signup">
-            Create your FleetCare account <span aria-hidden="true">→</span>
+            Create your Telfay account <span aria-hidden="true">→</span>
           </Link>
         </div>
         <ol className="public-how-steps">
@@ -293,9 +276,9 @@ export default function HomePage() {
 
       <section className="public-final-cta">
         <div>
-          <p className="public-eyebrow">YOUR FLEETCARE WORKSPACE</p>
+          <p className="public-eyebrow">YOUR TELFAY WORKSPACE</p>
           <h2>Bring your fleet into clearer view.</h2>
-          <p>Get started with FleetCare and organize your operations in one place.</p>
+          <p>Get started with Telfay and organize your operations in one place.</p>
         </div>
         <div className="public-final-actions">
           <Link className="public-button public-button-light" href="/signup">
@@ -308,12 +291,12 @@ export default function HomePage() {
       </section>
 
       <footer className="public-footer">
-        <Link className="public-brand" href="/" aria-label="FleetCare home">
+        <Link className="public-brand" href="/" aria-label="Telfay home">
           <BrandMark />
-          <span>FleetCare</span>
+          <span>Telfay</span>
         </Link>
         <p>Clearer fleet operations, all in one place.</p>
-        <span>© FleetCare</span>
+        <span>© Telfay</span>
       </footer>
     </main>
   );

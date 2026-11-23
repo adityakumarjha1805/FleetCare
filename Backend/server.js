@@ -11,7 +11,7 @@ async function startServer() {
     const server = app.listen(config.port);
     server.once('error', reject);
     server.once('listening', () => {
-      console.log(`FleetCare API listening on port ${config.port}`);
+      console.log(`Telfay API listening on port ${config.port}`);
       resolve(server);
     });
   });
@@ -19,7 +19,7 @@ async function startServer() {
 
 if (require.main === module) {
   startServer().catch(async (error) => {
-    console.error(`FleetCare API startup failed: ${error.message}`);
+    console.error(`Telfay API startup failed: ${error.message}`);
     await mongoose.disconnect();
     process.exitCode = 1;
   });

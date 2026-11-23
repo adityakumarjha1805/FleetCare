@@ -3,7 +3,7 @@ import { test } from "node:test";
 
 const { getSafeReturnPath } = await import("../lib/safe-return-path.js");
 
-test("safe return paths allow known protected FleetCare routes", () => {
+test("safe return paths allow known protected Telfay routes", () => {
   assert.equal(getSafeReturnPath("/vehicles"), "/vehicles");
   assert.equal(
     getSafeReturnPath("/diagnostics?view=recent"),

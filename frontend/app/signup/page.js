@@ -1,8 +1,8 @@
 import AuthPage from "../../components/auth-page";
 
 export const metadata = {
-  title: "Create account | FleetCare",
-  description: "Create your FleetCare fleet operations account.",
+  title: "Create account | Telfay",
+  description: "Create your Telfay fleet operations account.",
 };
 export const instant = false;
 

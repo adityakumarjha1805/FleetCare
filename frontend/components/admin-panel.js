@@ -58,8 +58,8 @@ export default function AdminPanel() {
       <div className="admin-page">
         <section className="admin-hero">
           <p className="eyebrow">PLATFORM ADMINISTRATION</p>
-          <h1>FleetCare Admin Panel</h1>
-          <p>Manage platform users and monitor all saved FleetCare records.</p>
+          <h1>Telfay Admin Panel</h1>
+          <p>Manage platform users and monitor all saved Telfay records.</p>
         </section>
         {error && <p className="form-error-summary" role="alert">{error}</p>}
         {status && <p className="form-success-summary" role="status">{status}</p>}

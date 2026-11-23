@@ -1,6 +1,6 @@
-# FleetCare frontend
+# Telfay frontend
 
-This directory contains FleetCare's Next.js App Router frontend, implemented
+This directory contains Telfay's Next.js App Router frontend, implemented
 with JavaScript and React. For full project architecture, backend setup,
 authentication, data workflows, limitations, and tests, see the
 [repository README](../README.md).

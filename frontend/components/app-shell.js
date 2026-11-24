@@ -416,7 +416,10 @@ export default function AppShell({
             onClick={onNavigate}
           >
             <BrandMark />
-            <span className="brand-name">Telfay</span>
+            <span className="brand-name new-brand-wordmark">
+              <b>tel</b>
+              <i>fay</i>
+            </span>
           </Link>
           <button
             className="sidebar-close"

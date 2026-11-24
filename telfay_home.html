@@ -1,0 +1,1914 @@
+<!DOCTYPE html>
+<html lang="en" class="scroll-smooth">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>telfay — Telematics &amp; Fleet Intelligence</title>
+
+  <!-- Google Fonts: Plus Jakarta Sans (Headings), Inter (Body/UI), JetBrains Mono (Data/Telemetry) -->
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link
+    href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500;600;700&family=Plus+Jakarta+Sans:wght@600;700;800&display=swap"
+    rel="stylesheet"
+  />
+
+  <!-- Tailwind CSS -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          colors: {
+            canvas: '#F7F7F5',
+            surface: '#FFFFFF',
+            hover: '#F1F0EC',
+            activeRow: '#EBEAE4',
+            serving: '#FEF5F1',
+            inputBg: '#FAFAF9',
+            hairline: '#E4E3DD',
+            strongBorder: '#CFCBC2',
+            servingBorder: '#F5C7B8',
+            charcoal: '#181816',
+            secondary: '#57554E',
+            muted: '#6E6B63',
+            vermilion: {
+              DEFAULT: '#D9481E',
+              hover: '#BF3B15',
+            },
+            cobalt: {
+              DEFAULT: '#1D4ED8',
+              hover: '#1E40AF',
+            },
+          },
+          fontFamily: {
+            display: ['"Plus Jakarta Sans"', '"Inter"', 'sans-serif'],
+            sans: ['"Inter"', '-apple-system', 'BlinkMacSystemFont', 'sans-serif'],
+            mono: ['"JetBrains Mono"', 'ui-monospace', 'monospace'],
+          },
+        },
+      },
+    };
+  </script>
+
+  <!-- Three.js (Telemetry Mesh) & GSAP + ScrollTrigger (Scrollytelling) -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.5/gsap.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.5/ScrollTrigger.min.js"></script>
+
+  <style>
+    /* ── SWISS TRIAGE / BRAUN INSTRUMENT PANEL BASE RULES ── */
+    *, *::before, *::after {
+      box-sizing: border-box;
+    }
+
+    body {
+      font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+      background-color: #F7F7F5;
+      color: #181816;
+      -webkit-font-smoothing: antialiased;
+      overflow-x: hidden;
+    }
+
+    h1, h2, h3, h4, .font-heading {
+      font-family: 'Plus Jakarta Sans', 'Inter', sans-serif;
+      letter-spacing: -0.02em;
+    }
+
+    /* Tabular monospace strictly for numeric data, plates, DTC codes & IDs */
+    .mono-data {
+      font-family: 'JetBrains Mono', ui-monospace, monospace;
+      font-variant-numeric: tabular-nums;
+      font-feature-settings: 'tnum' on, 'zero' on;
+    }
+
+    /* ── SMOOTH CROSS-FADE STACKING (NO display:none SNAP GLITCHES) ── */
+    .crossfade-stack {
+      display: grid;
+      grid-template-columns: 1fr;
+    }
+
+    .crossfade-panel {
+      grid-area: 1 / 1;
+      opacity: 0;
+      transform: translateY(6px);
+      pointer-events: none;
+      visibility: hidden;
+      transition: opacity 220ms cubic-bezier(0.16, 1, 0.3, 1),
+                  transform 220ms cubic-bezier(0.16, 1, 0.3, 1),
+                  visibility 220ms;
+    }
+
+    .crossfade-panel.is-active {
+      opacity: 1;
+      transform: translateY(0);
+      pointer-events: auto;
+      visibility: visible;
+    }
+
+    /* ── SLIDING PILL INDICATORS (DAMPED 180MS) ── */
+    .segmented-control {
+      position: relative;
+      display: inline-grid;
+      background-color: #EBEAE4;
+      border: 1px solid #E4E3DD;
+      border-radius: 4px;
+      padding: 2px;
+    }
+
+    .segmented-slider {
+      position: absolute;
+      top: 2px;
+      bottom: 2px;
+      left: 2px;
+      background-color: #FFFFFF;
+      border: 1px solid #CFCBC2;
+      border-radius: 4px;
+      transition: transform 180ms cubic-bezier(0.16, 1, 0.3, 1),
+                  width 180ms cubic-bezier(0.16, 1, 0.3, 1);
+      pointer-events: none;
+    }
+
+    /* ── ENTRANCE CASCADE (CRITICALLY DAMPED, NO BOUNCE) ── */
+    @keyframes swissFadeUp {
+      from {
+        opacity: 0;
+        transform: translateY(10px);
+      }
+      to {
+        opacity: 1;
+        transform: translateY(0);
+      }
+    }
+
+    .reveal-1 { animation: swissFadeUp 240ms ease-out 20ms both; }
+    .reveal-2 { animation: swissFadeUp 240ms ease-out 70ms both; }
+    .reveal-3 { animation: swissFadeUp 240ms ease-out 120ms both; }
+    .reveal-4 { animation: swissFadeUp 240ms ease-out 170ms both; }
+
+    /* ── FOCUS & ACCESSIBILITY ── */
+    button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible {
+      outline: 2px solid #D9481E;
+      outline-offset: 2px;
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      *, *::before, *::after {
+        animation-duration: 0.01ms !important;
+        transition-duration: 0.01ms !important;
+        scroll-behavior: auto !important;
+      }
+    }
+  </style>
+</head>
+<body class="min-h-screen flex flex-col selection:bg-[#D9481E] selection:text-white">
+
+  <!-- ════════════════════════════════════════════════════════════════
+       1. TOP 52PX STICKY NAVIGATION BAR (1px hairline bottom border)
+  ════════════════════════════════════════════════════════════════ -->
+  <header class="sticky top-0 z-40 h-[52px] w-full bg-[#F7F7F5] border-b border-[#E4E3DD]">
+    <div class="max-w-[1200px] mx-auto h-full px-4 sm:px-6 flex items-center justify-between">
+      <!-- Custom telfay Logo Mark (12px radius mark container + Plus Jakarta Sans lowercase wordmark) -->
+      <a href="#top" aria-label="telfay homepage" class="inline-flex items-center gap-2.5 group">
+        <div class="w-8 h-8 rounded-[12px] bg-[#FFFFFF] border border-[#CFCBC2] flex items-center justify-center group-hover:border-[#D9481E] transition-colors duration-150">
+          <!-- Interlocking Warm Charcoal Shield + Signal Vermilion Telemetry Pulse & Upward Arrow -->
+          <svg width="20" height="20" viewBox="0 0 40 40" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+            <path
+              d="M20 3.5L6.5 8.8V19.6C6.5 28.4 12.2 35.4 20 37.5C27.8 35.4 33.5 28.4 33.5 19.6V8.8L20 3.5Z"
+              stroke="#181816"
+              stroke-width="3"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+            />
+            <path
+              d="M12.2 17.5V12.8L20 9.8L25.2 11.8"
+              stroke="#D9481E"
+              stroke-width="2.6"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+            />
+            <path
+              d="M27.8 20.5C27.4 26.2 24.1 30.6 20 32.1C16.8 30.9 14.2 28.1 13 24.4"
+              stroke="#D9481E"
+              stroke-width="2.6"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+            />
+            <path
+              d="M5.5 20.5H12.5L15.4 15.8L18.8 24.8L22.2 18.2L28.5 12.2"
+              stroke="#D9481E"
+              stroke-width="2.8"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+            />
+            <path
+              d="M23.8 11.8H29V17"
+              stroke="#D9481E"
+              stroke-width="2.8"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+            />
+          </svg>
+        </div>
+        <span class="font-heading font-extrabold text-[20px] leading-none tracking-[-0.03em]">
+          <span class="text-[#181816]">tel</span><span class="text-[#D9481E]">fay</span>
+        </span>
+      </a>
+
+      <!-- Clean Navigation Links & Primary CTA -->
+      <nav aria-label="Primary Navigation" class="flex items-center gap-6 sm:gap-7">
+        <div class="hidden md:flex items-center gap-7 text-[13px] font-medium text-[#57554E]">
+          <a href="#workflow-story" class="hover:text-[#181816] transition-colors duration-150">Workflow Story</a>
+          <a href="#how-it-works" class="hover:text-[#181816] transition-colors duration-150">How it works</a>
+          <button
+            type="button"
+            onclick="openAuthModal('signin')"
+            class="hover:text-[#181816] transition-colors duration-150 cursor-pointer"
+          >
+            Sign In
+          </button>
+        </div>
+
+        <button
+          type="button"
+          onclick="openAuthModal('signup')"
+          class="h-[32px] px-3.5 rounded-[4px] bg-[#D9481E] hover:bg-[#BF3B15] text-[#FFFFFF] text-[13px] font-medium transition-colors duration-150 cursor-pointer"
+        >
+          Get Started
+        </button>
+      </nav>
+    </div>
+  </header>
+
+  <main id="top" class="flex-grow">
+    <!-- ════════════════════════════════════════════════════════════════
+         2. HERO SECTION + INTERACTIVE OPERATIONAL DESK
+    ════════════════════════════════════════════════════════════════ -->
+    <section class="relative max-w-[1200px] mx-auto px-4 sm:px-6 pt-12 pb-16 lg:pt-16 lg:pb-20">
+      <div class="grid grid-cols-1 lg:grid-cols-12 gap-10 lg:gap-10 items-start">
+
+        <!-- Left Editorial Column (5 cols) -->
+        <div class="lg:col-span-5 lg:pt-3">
+          <div class="reveal-1 inline-flex items-center gap-2 mb-4">
+            <span class="w-[6px] h-[6px] rounded-full bg-[#D9481E]"></span>
+            <span class="text-[11px] font-medium uppercase tracking-[0.08em] text-[#57554E]">
+              FLEET OPERATIONS WORKSPACE
+            </span>
+          </div>
+
+          <h1 class="reveal-2 font-heading text-[34px] sm:text-[42px] font-bold leading-[1.12] text-[#181816] mb-5">
+            Keep your fleet moving,<br class="hidden sm:inline" /> with everything in view.
+          </h1>
+
+          <p class="reveal-3 text-[15px] sm:text-[16px] leading-[1.6] text-[#57554E] mb-7 max-w-[460px]">
+            telfay unifies vehicle records, live CAN bus diagnostics, maintenance schedules, and service requests into one flat operational workspace.
+          </p>
+
+          <!-- Primary & Secondary 4px-radius Buttons -->
+          <div class="reveal-4 flex flex-wrap items-center gap-3 mb-8">
+            <button
+              type="button"
+              onclick="openAuthModal('signup')"
+              class="h-[38px] px-4 rounded-[4px] bg-[#D9481E] hover:bg-[#BF3B15] text-[#FFFFFF] text-[14px] font-medium inline-flex items-center gap-2 transition-colors duration-150 cursor-pointer"
+            >
+              <span>Get Started</span>
+              <span aria-hidden="true">→</span>
+            </button>
+
+            <button
+              type="button"
+              onclick="switchSandboxMode('driver'); document.getElementById('operational-desk').scrollIntoView({ behavior: 'smooth', block: 'center' });"
+              class="h-[38px] px-4 rounded-[4px] bg-[#FFFFFF] hover:bg-[#F1F0EC] text-[#181816] border border-[#CFCBC2] text-[14px] font-medium inline-flex items-center gap-2 transition-colors duration-150 cursor-pointer"
+            >
+              <span class="text-[#D9481E] font-semibold">+</span>
+              <span>Driver Report (&lt; 30s)</span>
+            </button>
+          </div>
+
+          <!-- Hairline Metadata Footnote -->
+          <div class="pt-4 border-t border-[#E4E3DD] flex items-center justify-between text-[13px] text-[#6E6B63]">
+            <span>Built for fleet managers, coordinators &amp; drivers.</span>
+            <span class="inline-flex items-center gap-1.5 text-[11px] font-medium text-[#166534]">
+              <span class="w-[6px] h-[6px] rounded-full bg-[#16A34A]"></span>
+              Live Telemetry
+            </span>
+          </div>
+        </div>
+
+        <!-- Right Column: Subtle Three.js Wireframe Mesh + 6px-Radius Operational Desk (7 cols) -->
+        <div id="operational-desk" class="lg:col-span-7 relative">
+          <!-- Architectural Wireframe Telemetry Mesh (Behind right card only, low opacity) -->
+          <div
+            id="threejs-telemetry-bg"
+            aria-hidden="true"
+            class="absolute -inset-6 pointer-events-none opacity-[0.18] z-0 overflow-hidden"
+          ></div>
+
+          <!-- 6px-Radius Elevated Panel (1px solid #E4E3DD border, ZERO shadow) -->
+          <div class="relative z-10 bg-[#FFFFFF] rounded-[6px] border border-[#E4E3DD] overflow-hidden">
+
+            <!-- Top Operational Instrument Bar -->
+            <div class="px-4 py-2.5 bg-[#F7F7F5] border-b border-[#E4E3DD] flex flex-wrap items-center justify-between gap-2">
+              <div class="flex items-center gap-2">
+                <span class="text-[11px] font-medium uppercase tracking-[0.08em] text-[#57554E]">
+                  OPERATIONAL DESK
+                </span>
+                <span class="text-[#CFCBC2]">/</span>
+                <span class="mono-data text-[12px] font-semibold text-[#181816]">HUB-BLR-01</span>
+              </div>
+
+              <!-- Role Switcher with Sliding Indicator -->
+              <div id="roleToggleGroup" class="segmented-control grid-cols-2 text-[12px] font-medium" role="tablist">
+                <div id="roleSlider" class="segmented-slider" style="width: calc(50% - 2px); transform: translateX(0);"></div>
+                <button
+                  type="button"
+                  id="btnRoleManager"
+                  role="tab"
+                  aria-selected="true"
+                  onclick="switchSandboxMode('manager')"
+                  class="relative z-10 px-3 py-1 rounded-[4px] text-[#181816] transition-colors duration-150 cursor-pointer whitespace-nowrap"
+                >
+                  Fleet Manager View
+                </button>
+                <button
+                  type="button"
+                  id="btnRoleDriver"
+                  role="tab"
+                  aria-selected="false"
+                  onclick="switchSandboxMode('driver')"
+                  class="relative z-10 px-3 py-1 rounded-[4px] text-[#57554E] hover:text-[#181816] transition-colors duration-150 cursor-pointer whitespace-nowrap"
+                >
+                  Driver Report (<span class="mono-data">&lt; 30s</span>)
+                </button>
+              </div>
+            </div>
+
+            <!-- Cross-Fade Stack: Fleet Manager View vs Driver Report Simulator -->
+            <div class="crossfade-stack">
+
+              <!-- ── MODE A: FLEET MANAGER VIEW ── -->
+              <div id="panelManagerView" class="crossfade-panel is-active">
+                <!-- Subheader + Sub-Navigation Tabs -->
+                <div class="px-5 py-4 border-b border-[#E4E3DD] flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                  <div>
+                    <div class="text-[11px] font-medium uppercase tracking-[0.08em] text-[#6E6B63]">
+                      LIVE FLEET TELEMETRY
+                    </div>
+                    <h2 class="font-heading text-[18px] font-semibold text-[#181816] mt-0.5">
+                      Everything in one place
+                    </h2>
+                  </div>
+
+                  <!-- Sub-Tabs ('Vehicles', 'Diagnostics', 'Service Requests') with Sliding Indicator -->
+                  <div id="subTabGroup" class="segmented-control grid-cols-3 text-[12px] font-medium" role="tablist">
+                    <div id="subTabSlider" class="segmented-slider" style="width: calc(33.333% - 1.5px); transform: translateX(0);"></div>
+                    <button
+                      type="button"
+                      id="subBtnVehicles"
+                      role="tab"
+                      aria-selected="true"
+                      onclick="switchManagerTab('vehicles')"
+                      class="relative z-10 px-2.5 py-1 rounded-[4px] text-[#181816] transition-colors duration-150 cursor-pointer whitespace-nowrap"
+                    >
+                      Vehicles
+                    </button>
+                    <button
+                      type="button"
+                      id="subBtnDiagnostics"
+                      role="tab"
+                      aria-selected="false"
+                      onclick="switchManagerTab('diagnostics')"
+                      class="relative z-10 px-2.5 py-1 rounded-[4px] text-[#57554E] hover:text-[#181816] transition-colors duration-150 cursor-pointer whitespace-nowrap"
+                    >
+                      Diagnostics
+                    </button>
+                    <button
+                      type="button"
+                      id="subBtnRequests"
+                      role="tab"
+                      aria-selected="false"
+                      onclick="switchManagerTab('requests')"
+                      class="relative z-10 px-2.5 py-1 rounded-[4px] text-[#57554E] hover:text-[#181816] transition-colors duration-150 cursor-pointer whitespace-nowrap"
+                    >
+                      Requests (<span id="requestCountBadge" class="mono-data">2</span>)
+                    </button>
+                  </div>
+                </div>
+
+                <!-- Live Ticket Sync Banner (Shown after Driver Report submission) -->
+                <div
+                  id="newTicketAlertBanner"
+                  class="hidden px-5 py-2.5 bg-[#F0FDF4] border-b border-[#BBF7D0] text-[#166534] text-[13px] flex items-center justify-between gap-2"
+                >
+                  <div class="flex items-center gap-2">
+                    <span class="w-[6px] h-[6px] rounded-full bg-[#16A34A] shrink-0"></span>
+                    <span id="newTicketAlertText">New work order logged to Service Requests.</span>
+                  </div>
+                  <button
+                    type="button"
+                    onclick="document.getElementById('newTicketAlertBanner').classList.add('hidden')"
+                    class="text-[12px] font-medium text-[#1D4ED8] hover:text-[#1E40AF] cursor-pointer"
+                  >
+                    Dismiss
+                  </button>
+                </div>
+
+                <!-- Inner Cross-Fade Stack for Manager Sub-Tabs -->
+                <div class="crossfade-stack">
+
+                  <!-- TAB 1: VEHICLES OVERVIEW -->
+                  <div id="tabVehicles" class="crossfade-panel is-active p-5 space-y-5">
+                    <!-- Equal-Height Metric Boxes (1px hairline border, 6px radius) -->
+                    <div class="grid grid-cols-1 sm:grid-cols-2 gap-4 items-stretch">
+                      <!-- Left KPI Box -->
+                      <div class="p-4 rounded-[6px] border border-[#E4E3DD] bg-[#FAFAF9] flex flex-col justify-between">
+                        <div class="flex items-center justify-between mb-2">
+                          <span class="text-[11px] font-medium uppercase tracking-[0.06em] text-[#57554E]">
+                            ACTIVE FLEET STATUS
+                          </span>
+                          <span class="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-[4px] text-[11px] font-medium bg-[#F0FDF4] text-[#166534] border border-[#BBF7D0]">
+                            <span class="w-[6px] h-[6px] rounded-full bg-[#16A34A]"></span>
+                            Online
+                          </span>
+                        </div>
+                        <div class="text-[22px] font-bold text-[#181816] mb-2">
+                          <span class="mono-data">18</span> <span class="font-heading font-semibold text-[18px]">Active Vehicles</span>
+                        </div>
+                        <!-- Single-line breakdown with JetBrains Mono numbers & Inter labels -->
+                        <div class="text-[12px] text-[#57554E] flex items-center gap-1.5 whitespace-nowrap overflow-x-auto">
+                          <span class="inline-flex items-center gap-1 text-[#166534] font-medium">
+                            <span class="w-[6px] h-[6px] rounded-full bg-[#16A34A]"></span>
+                            <span class="mono-data">15</span> Healthy
+                          </span>
+                          <span class="text-[#CFCBC2]">·</span>
+                          <span class="text-[#92400E] font-medium">
+                            <span class="mono-data">2</span> Due
+                          </span>
+                          <span class="text-[#CFCBC2]">·</span>
+                          <span class="text-[#B91C1C] font-medium">
+                            <span class="mono-data" id="criticalMetricCount">1</span> Critical
+                          </span>
+                        </div>
+                      </div>
+
+                      <!-- Right KPI Box -->
+                      <div class="p-4 rounded-[6px] border border-[#E4E3DD] bg-[#FAFAF9] flex flex-col justify-between">
+                        <div class="flex items-center justify-between mb-2">
+                          <span class="text-[11px] font-medium uppercase tracking-[0.06em] text-[#57554E]">
+                            ROUTE AVAILABILITY
+                          </span>
+                          <span class="mono-data text-[11px] font-medium text-[#6E6B63]">SHIFT A</span>
+                        </div>
+                        <div class="text-[22px] font-bold text-[#181816] mb-2">
+                          <span class="mono-data">83.3%</span> <span class="font-heading font-semibold text-[18px]">Dispatched</span>
+                        </div>
+                        <div class="flex items-center gap-2.5">
+                          <div class="flex-1 h-[6px] rounded-[4px] bg-[#EBEAE4] overflow-hidden">
+                            <div class="h-full bg-[#16A34A] rounded-[4px]" style="width: 83.3%"></div>
+                          </div>
+                          <span class="text-[12px] text-[#57554E] whitespace-nowrap">
+                            <span class="mono-data font-medium text-[#181816]">3</span> Idle in depot
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+
+                    <!-- Live Dispatch & Alerts Hairline Table -->
+                    <div class="border border-[#E4E3DD] rounded-[6px] overflow-hidden">
+                      <div class="px-4 py-2.5 bg-[#F7F7F5] border-b border-[#E4E3DD] flex items-center justify-between text-[11px] font-medium uppercase tracking-[0.08em] text-[#57554E]">
+                        <span>LIVE DISPATCH &amp; TRIAGE FEED</span>
+                        <span class="text-[#6E6B63]">Real-time sync</span>
+                      </div>
+
+                      <div id="liveDispatchList" class="divide-y divide-[#E4E3DD] bg-[#FFFFFF]">
+                        <!-- Row 1: Critical / Attention -->
+                        <div class="px-4 py-3 flex items-center justify-between gap-3 bg-[#FEF5F1] hover:bg-[#F1F0EC] transition-colors duration-150">
+                          <div class="flex items-center gap-2.5 min-w-0">
+                            <span class="mono-data text-[13px] font-semibold text-[#181816] shrink-0">KA-01-MX-3434</span>
+                            <span class="text-[#CFCBC2]">·</span>
+                            <span class="text-[13px] text-[#181816] truncate">Brake Pad Wear Alert (<span class="mono-data text-[12px] text-[#57554E]">P0552</span>)</span>
+                          </div>
+                          <span class="inline-flex items-center gap-1.5 px-2 py-1 rounded-[4px] text-[11px] font-medium bg-[#FFFBEB] text-[#92400E] border border-[#FDE68A] shrink-0">
+                            <span class="w-[6px] h-[6px] rounded-full bg-[#D97706]"></span>
+                            In Progress
+                          </span>
+                        </div>
+
+                        <!-- Row 2: Healthy -->
+                        <div class="px-4 py-3 flex items-center justify-between gap-3 hover:bg-[#F1F0EC] transition-colors duration-150">
+                          <div class="flex items-center gap-2.5 min-w-0">
+                            <span class="mono-data text-[13px] font-semibold text-[#181816] shrink-0">MH-02-EA-9081</span>
+                            <span class="text-[#CFCBC2]">·</span>
+                            <span class="text-[13px] text-[#57554E] truncate">Freightline Express · <span class="mono-data text-[12px] text-[#181816]">64 km/h</span></span>
+                          </div>
+                          <span class="inline-flex items-center gap-1.5 px-2 py-1 rounded-[4px] text-[11px] font-medium bg-[#F0FDF4] text-[#166534] border border-[#BBF7D0] shrink-0">
+                            <span class="w-[6px] h-[6px] rounded-full bg-[#16A34A]"></span>
+                            Healthy
+                          </span>
+                        </div>
+
+                        <!-- Row 3: Healthy -->
+                        <div class="px-4 py-3 flex items-center justify-between gap-3 hover:bg-[#F1F0EC] transition-colors duration-150">
+                          <div class="flex items-center gap-2.5 min-w-0">
+                            <span class="mono-data text-[13px] font-semibold text-[#181816] shrink-0">DL-09-CP-1190</span>
+                            <span class="text-[#CFCBC2]">·</span>
+                            <span class="text-[13px] text-[#57554E] truncate">Scheduled <span class="mono-data text-[12px]">40,000 km</span> Service Complete</span>
+                          </div>
+                          <span class="inline-flex items-center gap-1.5 px-2 py-1 rounded-[4px] text-[11px] font-medium bg-[#F0FDF4] text-[#166534] border border-[#BBF7D0] shrink-0">
+                            <span class="w-[6px] h-[6px] rounded-full bg-[#16A34A]"></span>
+                            Healthy
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  <!-- TAB 2: DIAGNOSTICS VIEW -->
+                  <div id="tabDiagnostics" class="crossfade-panel p-5 space-y-5">
+                    <div class="grid grid-cols-1 sm:grid-cols-2 gap-4 items-stretch">
+                      <div class="p-4 rounded-[6px] border border-[#E4E3DD] bg-[#FAFAF9]">
+                        <div class="text-[11px] font-medium uppercase tracking-[0.06em] text-[#57554E] mb-2">
+                          TELEMETRY HEALTH INDEX
+                        </div>
+                        <div class="text-[22px] font-bold text-[#181816] mb-1.5">
+                          <span class="mono-data">94.8%</span> <span class="font-heading font-semibold text-[18px]">Nominal</span>
+                        </div>
+                        <div class="text-[12px] text-[#57554E]">
+                          <span class="mono-data font-semibold text-[#B91C1C]">1</span> active fault code (<span class="mono-data">P0552</span>) isolated
+                        </div>
+                      </div>
+
+                      <div class="p-4 rounded-[6px] border border-[#E4E3DD] bg-[#FAFAF9]">
+                        <div class="text-[11px] font-medium uppercase tracking-[0.06em] text-[#57554E] mb-2">
+                          CAN BUS SYNC LATENCY
+                        </div>
+                        <div class="text-[22px] font-bold text-[#181816] mb-1.5">
+                          <span class="mono-data">124 ms</span> <span class="font-heading font-semibold text-[18px]">Polling</span>
+                        </div>
+                        <div class="text-[12px] text-[#166534] font-medium">
+                          OBD-II / J1939 gateway active
+                        </div>
+                      </div>
+                    </div>
+
+                    <!-- Braun Instrument Telemetry Bar Readout -->
+                    <div class="p-4 rounded-[6px] border border-[#E4E3DD] bg-[#FFFFFF] space-y-3">
+                      <div class="flex items-center justify-between">
+                        <span class="text-[12px] font-semibold text-[#181816]">Hydraulic Line Pressure Telemetry (<span class="mono-data">KA-01-MX-3434</span>)</span>
+                        <span class="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-[4px] text-[11px] font-medium bg-[#FEF2F2] text-[#B91C1C] border border-[#FECACA]">
+                          <span class="w-[6px] h-[6px] rounded-full bg-[#DC2626]"></span>
+                          Critical Dip
+                        </span>
+                      </div>
+                      <div class="h-16 flex items-end gap-1.5 pt-2 border-b border-[#E4E3DD]">
+                        <div class="flex-1 bg-[#181816]/15 rounded-t-[2px] h-[72%]"></div>
+                        <div class="flex-1 bg-[#181816]/15 rounded-t-[2px] h-[76%]"></div>
+                        <div class="flex-1 bg-[#181816]/15 rounded-t-[2px] h-[74%]"></div>
+                        <div class="flex-1 bg-[#181816]/15 rounded-t-[2px] h-[70%]"></div>
+                        <div class="flex-1 bg-[#D9481E] rounded-t-[2px] h-[34%]" title="06:12 AM Threshold Breach"></div>
+                        <div class="flex-1 bg-[#D97706] rounded-t-[2px] h-[48%]" title="06:18 AM Triage"></div>
+                        <div class="flex-1 bg-[#16A34A] rounded-t-[2px] h-[82%]" title="Bay 2 Calibration"></div>
+                        <div class="flex-1 bg-[#16A34A] rounded-t-[2px] h-[85%]" title="Verified"></div>
+                      </div>
+                      <div class="mono-data flex justify-between text-[11px] text-[#6E6B63]">
+                        <span>05:30 AM</span>
+                        <span>06:12 AM (P0552)</span>
+                        <span>07:45 AM</span>
+                        <span>NOW</span>
+                      </div>
+                    </div>
+                  </div>
+
+                  <!-- TAB 3: SERVICE REQUESTS QUEUE -->
+                  <div id="tabRequests" class="crossfade-panel p-5 space-y-4">
+                    <div class="flex items-center justify-between">
+                      <span class="text-[11px] font-medium uppercase tracking-[0.08em] text-[#57554E]">
+                        ACTIVE WORKSHOP QUEUE (CLICK STATUS TO ADVANCE)
+                      </span>
+                      <button
+                        type="button"
+                        onclick="switchSandboxMode('driver')"
+                        class="text-[12px] font-medium text-[#1D4ED8] hover:text-[#1E40AF] cursor-pointer"
+                      >
+                        + Log New Request
+                      </button>
+                    </div>
+
+                    <div id="serviceRequestsList" class="border border-[#E4E3DD] rounded-[6px] divide-y divide-[#E4E3DD] bg-[#FFFFFF]">
+                      <!-- Work Order 1 -->
+                      <div class="px-4 py-3 flex items-center justify-between gap-3 hover:bg-[#F1F0EC] transition-colors duration-150">
+                        <div class="min-w-0">
+                          <div class="flex items-center gap-2 mb-0.5">
+                            <span class="mono-data text-[12px] font-bold text-[#D9481E]">#WO-8821</span>
+                            <span class="mono-data text-[12px] font-semibold text-[#181816]">KA-01-MX-3434</span>
+                          </div>
+                          <div class="text-[13px] font-medium text-[#181816] truncate">Front Brake Pad &amp; Rotor Service · Bay 2</div>
+                        </div>
+                        <button
+                          type="button"
+                          onclick="cycleWorkOrderStatus(this)"
+                          data-stage="In Progress"
+                          title="Click to advance workflow stage"
+                          class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-[4px] text-[11px] font-medium bg-[#FFFBEB] text-[#92400E] border border-[#FDE68A] shrink-0 cursor-pointer"
+                        >
+                          <span class="w-[6px] h-[6px] rounded-full bg-[#D97706]"></span>
+                          <span>In Progress</span>
+                        </button>
+                      </div>
+
+                      <!-- Work Order 2 -->
+                      <div class="px-4 py-3 flex items-center justify-between gap-3 hover:bg-[#F1F0EC] transition-colors duration-150">
+                        <div class="min-w-0">
+                          <div class="flex items-center gap-2 mb-0.5">
+                            <span class="mono-data text-[12px] font-bold text-[#57554E]">#WO-8820</span>
+                            <span class="mono-data text-[12px] font-semibold text-[#181816]">DL-09-CP-1190</span>
+                          </div>
+                          <div class="text-[13px] font-medium text-[#181816] truncate">40,000 km Oil, Filter &amp; Alignment Check</div>
+                        </div>
+                        <button
+                          type="button"
+                          onclick="cycleWorkOrderStatus(this)"
+                          data-stage="Healthy"
+                          title="Click to advance workflow stage"
+                          class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-[4px] text-[11px] font-medium bg-[#F0FDF4] text-[#166534] border border-[#BBF7D0] shrink-0 cursor-pointer"
+                        >
+                          <span class="w-[6px] h-[6px] rounded-full bg-[#16A34A]"></span>
+                          <span>Completed</span>
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+
+                </div>
+              </div>
+
+              <!-- ── MODE B: DRIVER REPORT SIMULATOR (< 30s) ── -->
+              <div id="panelDriverView" class="crossfade-panel p-5 space-y-4">
+                <div class="p-3 rounded-[6px] bg-[#FEF5F1] border border-[#F5C7B8] text-[13px] text-[#57554E] flex items-center justify-between gap-2">
+                  <span>Select a vehicle and issue tag to dispatch a live work order into the Fleet Manager queue.</span>
+                  <span class="mono-data text-[11px] font-semibold text-[#D9481E] shrink-0">GPS LOCKED</span>
+                </div>
+
+                <form id="driverReportForm" onsubmit="submitDriverReport(event)" class="space-y-4">
+                  <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <div>
+                      <label for="driverPlateSelect" class="block text-[12px] font-medium text-[#181816] mb-1.5">
+                        Vehicle Plate <span class="text-[#DC2626]">*</span>
+                      </label>
+                      <select
+                        id="driverPlateSelect"
+                        class="mono-data w-full h-[36px] px-3 rounded-[4px] bg-[#FAFAF9] border border-[#CFCBC2] text-[13px] font-semibold text-[#181816]"
+                      >
+                        <option value="KA-01-MX-3434">KA-01-MX-3434 · Van #04</option>
+                        <option value="MH-02-EA-9081">MH-02-EA-9081 · Truck #11</option>
+                        <option value="TN-07-BR-5502">TN-07-BR-5502 · Pickup #02</option>
+                      </select>
+                    </div>
+
+                    <div>
+                      <label class="block text-[12px] font-medium text-[#181816] mb-1.5">
+                        1-Tap Issue Selector <span class="text-[#DC2626]">*</span>
+                      </label>
+                      <div class="grid grid-cols-3 gap-1.5" id="issueTagGroup">
+                        <button
+                          type="button"
+                          onclick="selectIssueTag(this, 'Brake Pad Wear', 'Critical')"
+                          class="issue-tag-btn h-[36px] px-2 rounded-[4px] border border-[#D9481E] bg-[#FEF5F1] text-[#D9481E] text-[12px] font-medium transition-colors duration-150 cursor-pointer truncate"
+                        >
+                          Brake Pad Wear
+                        </button>
+                        <button
+                          type="button"
+                          onclick="selectIssueTag(this, 'Low Tire PSI', 'Attention')"
+                          class="issue-tag-btn h-[36px] px-2 rounded-[4px] border border-[#CFCBC2] bg-[#FFFFFF] text-[#57554E] hover:bg-[#F1F0EC] text-[12px] font-medium transition-colors duration-150 cursor-pointer truncate"
+                        >
+                          Low Tire PSI
+                        </button>
+                        <button
+                          type="button"
+                          onclick="selectIssueTag(this, 'Oil Temp Alert', 'Critical')"
+                          class="issue-tag-btn h-[36px] px-2 rounded-[4px] border border-[#CFCBC2] bg-[#FFFFFF] text-[#57554E] hover:bg-[#F1F0EC] text-[12px] font-medium transition-colors duration-150 cursor-pointer truncate"
+                        >
+                          Oil Temp Alert
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div>
+                    <label for="driverNoteInput" class="block text-[12px] font-medium text-[#181816] mb-1.5">
+                      Quick Field Observation
+                    </label>
+                    <input
+                      id="driverNoteInput"
+                      type="text"
+                      value="Metallic squeak on front-left axle during braking"
+                      placeholder="Enter brief symptom note..."
+                      class="w-full h-[36px] px-3 rounded-[4px] bg-[#FAFAF9] border border-[#CFCBC2] text-[13px] text-[#181816]"
+                    />
+                  </div>
+
+                  <div class="pt-1 flex items-center justify-end gap-2.5">
+                    <button
+                      type="button"
+                      onclick="switchSandboxMode('manager')"
+                      class="h-[34px] px-3.5 rounded-[4px] bg-[#FFFFFF] hover:bg-[#F1F0EC] border border-[#CFCBC2] text-[13px] text-[#57554E] cursor-pointer"
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      type="submit"
+                      class="h-[34px] px-4 rounded-[4px] bg-[#D9481E] hover:bg-[#BF3B15] text-[#FFFFFF] text-[13px] font-medium inline-flex items-center gap-1.5 transition-colors duration-150 cursor-pointer"
+                    >
+                      <span>Dispatch Work Order</span>
+                      <span aria-hidden="true">→</span>
+                    </button>
+                  </div>
+                </form>
+              </div>
+
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ════════════════════════════════════════════════════════════════
+         3. METRICS STRIP (Single 1px #E4E3DD bordered 3-column grid, 6px radius)
+    ════════════════════════════════════════════════════════════════ -->
+    <section aria-label="Operational Benchmarks" class="max-w-[1200px] mx-auto px-4 sm:px-6 pb-16">
+      <div class="bg-[#FFFFFF] border border-[#E4E3DD] rounded-[6px] grid grid-cols-1 md:grid-cols-3 divide-y md:divide-y-0 md:divide-x divide-[#E4E3DD]">
+        <!-- Metric 1 -->
+        <div class="p-6 flex flex-col justify-between">
+          <div class="flex items-center justify-between mb-3">
+            <span class="text-[11px] font-medium uppercase tracking-[0.08em] text-[#57554E]">
+              INCIDENT INTAKE
+            </span>
+            <span class="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-[4px] text-[11px] font-medium bg-[#FFFBEB] text-[#92400E] border border-[#FDE68A]">
+              <span class="w-[6px] h-[6px] rounded-full bg-[#D97706]"></span>
+              <span class="mono-data">98%</span> Faster
+            </span>
+          </div>
+          <div class="mono-data text-[28px] font-bold text-[#181816] leading-none mb-2">
+            &lt; 30 sec
+          </div>
+          <p class="text-[13px] text-[#57554E] leading-[1.5]">
+            Structured driver reporting with vehicle plate autofill vs. manual paper inspection logs.
+          </p>
+        </div>
+
+        <!-- Metric 2 -->
+        <div class="p-6 flex flex-col justify-between">
+          <div class="flex items-center justify-between mb-3">
+            <span class="text-[11px] font-medium uppercase tracking-[0.08em] text-[#57554E]">
+              AUDIT TRAIL
+            </span>
+            <span class="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-[4px] text-[11px] font-medium bg-[#F0FDF4] text-[#166534] border border-[#BBF7D0]">
+              <span class="w-[6px] h-[6px] rounded-full bg-[#16A34A]"></span>
+              Verifiable
+            </span>
+          </div>
+          <div class="mono-data text-[28px] font-bold text-[#181816] leading-none mb-2">
+            100%
+          </div>
+          <p class="text-[13px] text-[#57554E] leading-[1.5]">
+            Every CAN bus fault, technician assignment, and parts allocation indexed per asset.
+          </p>
+        </div>
+
+        <!-- Metric 3 -->
+        <div class="p-6 flex flex-col justify-between">
+          <div class="flex items-center justify-between mb-3">
+            <span class="text-[11px] font-medium uppercase tracking-[0.08em] text-[#57554E]">
+              DATA SILOS
+            </span>
+            <span class="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-[4px] text-[11px] font-medium bg-[#F0FDF4] text-[#166534] border border-[#BBF7D0]">
+              <span class="w-[6px] h-[6px] rounded-full bg-[#16A34A]"></span>
+              Synchronized
+            </span>
+          </div>
+          <div class="mono-data text-[28px] font-bold text-[#181816] leading-none mb-2">
+            0
+          </div>
+          <p class="text-[13px] text-[#57554E] leading-[1.5]">
+            Replaces scattered spreadsheets and lost chat messages with a single operational board.
+          </p>
+        </div>
+      </div>
+    </section>
+
+    <!-- ════════════════════════════════════════════════════════════════
+         4. BORDERLESS EDITORIAL SCROLLYTELLING ("From dawn alert to audit sign-off")
+    ════════════════════════════════════════════════════════════════ -->
+    <section
+      id="workflow-story"
+      class="border-t border-b border-[#E4E3DD] py-16 lg:py-24 px-4 sm:px-6"
+    >
+      <div class="max-w-[1200px] mx-auto">
+        <!-- Editorial Section Header -->
+        <div class="max-w-[640px] mb-12 lg:mb-16">
+          <div class="inline-flex items-center gap-2 mb-3">
+            <span class="w-[6px] h-[6px] rounded-full bg-[#D9481E]"></span>
+            <span class="text-[11px] font-medium uppercase tracking-[0.08em] text-[#57554E]">
+              WORKFLOW STORY · END-TO-END TRACEABILITY
+            </span>
+          </div>
+          <h2 class="font-heading text-[28px] sm:text-[36px] font-bold leading-[1.15] text-[#181816] mb-3">
+            From dawn alert to audit sign-off.
+          </h2>
+          <p class="text-[15px] leading-[1.6] text-[#57554E]">
+            Follow a single vehicle event across four operational stages—from early sensor detection to verified workshop sign-off.
+          </p>
+        </div>
+
+        <!-- Mobile / Tablet Chapter Switcher Pills (< 1024px) -->
+        <div class="flex lg:hidden items-center gap-2 overflow-x-auto pb-4 mb-4">
+          <button
+            type="button"
+            onclick="activateStoryStage(0, true)"
+            data-mobile-pill="0"
+            class="mobile-story-pill px-3 py-1.5 rounded-[4px] border border-[#181816] bg-[#181816] text-[#FFFFFF] text-[12px] font-medium whitespace-nowrap cursor-pointer"
+          >
+            <span class="mono-data">01</span> · Dawn Alert
+          </button>
+          <button
+            type="button"
+            onclick="activateStoryStage(1, true)"
+            data-mobile-pill="1"
+            class="mobile-story-pill px-3 py-1.5 rounded-[4px] border border-[#CFCBC2] bg-[#FFFFFF] text-[#57554E] text-[12px] font-medium whitespace-nowrap cursor-pointer"
+          >
+            <span class="mono-data">02</span> · CAN Triage
+          </button>
+          <button
+            type="button"
+            onclick="activateStoryStage(2, true)"
+            data-mobile-pill="2"
+            class="mobile-story-pill px-3 py-1.5 rounded-[4px] border border-[#CFCBC2] bg-[#FFFFFF] text-[#57554E] text-[12px] font-medium whitespace-nowrap cursor-pointer"
+          >
+            <span class="mono-data">03</span> · Bay 2 Dispatch
+          </button>
+          <button
+            type="button"
+            onclick="activateStoryStage(3, true)"
+            data-mobile-pill="3"
+            class="mobile-story-pill px-3 py-1.5 rounded-[4px] border border-[#CFCBC2] bg-[#FFFFFF] text-[#57554E] text-[12px] font-medium whitespace-nowrap cursor-pointer"
+          >
+            <span class="mono-data">04</span> · Audit Ledger
+          </button>
+        </div>
+
+        <!-- 12-Column Split: Borderless Left Editorial Chapters + Sticky Right Telemetry Frame -->
+        <div class="grid grid-cols-1 lg:grid-cols-12 gap-10 lg:gap-12 items-start">
+
+          <!-- Left Column: Borderless Editorial Chapters along a 2px Vertical Progress Rail (5 cols) -->
+          <div class="lg:col-span-5 relative pl-6 sm:pl-8">
+            <!-- Continuous 2px Vertical Rail (#E4E3DD track + #D9481E active bar) -->
+            <div aria-hidden="true" class="absolute left-0 top-2 bottom-2 w-[2px] bg-[#E4E3DD]">
+              <div
+                id="storyRailProgress"
+                class="w-full bg-[#D9481E] transition-all duration-200 ease-out"
+                style="height: 25%;"
+              ></div>
+            </div>
+
+            <div class="space-y-12 lg:space-y-20">
+              <!-- Chapter 01 -->
+              <article
+                data-story-chapter="0"
+                onclick="activateStoryStage(0, true)"
+                class="story-chapter cursor-pointer transition-opacity duration-200 opacity-100"
+              >
+                <div class="text-[11px] font-medium uppercase tracking-[0.08em] text-[#D9481E] mb-2">
+                  <span class="mono-data font-semibold">01 · 06:12 AM</span> — TELEMETRY TRIGGER
+                </div>
+                <h3 class="font-heading text-[21px] font-bold text-[#181816] mb-2.5">
+                  Dawn sensor anomaly detected
+                </h3>
+                <p class="text-[15px] leading-[1.6] text-[#57554E]">
+                  Before morning dispatch begins, vehicle <span class="mono-data text-[13px] font-semibold text-[#181816]">KA-01-MX-3434</span> flags a hydraulic line pressure drop during warm-up. No phone calls or paper notes required.
+                </p>
+              </article>
+
+              <!-- Chapter 02 -->
+              <article
+                data-story-chapter="1"
+                onclick="activateStoryStage(1, true)"
+                class="story-chapter cursor-pointer transition-opacity duration-200 opacity-55 hover:opacity-90"
+              >
+                <div class="text-[11px] font-medium uppercase tracking-[0.08em] text-[#57554E] mb-2">
+                  <span class="mono-data font-semibold">02 · 06:18 AM</span> — DIAGNOSTIC ENGINE
+                </div>
+                <h3 class="font-heading text-[21px] font-bold text-[#181816] mb-2.5">
+                  Instant CAN bus diagnostic triage
+                </h3>
+                <p class="text-[15px] leading-[1.6] text-[#57554E]">
+                  telfay translates raw fault code <span class="mono-data text-[13px] font-semibold text-[#181816]">P0552</span> into plain operational severity and links it directly to the vehicle's odometer and service history.
+                </p>
+              </article>
+
+              <!-- Chapter 03 -->
+              <article
+                data-story-chapter="2"
+                onclick="activateStoryStage(2, true)"
+                class="story-chapter cursor-pointer transition-opacity duration-200 opacity-55 hover:opacity-90"
+              >
+                <div class="text-[11px] font-medium uppercase tracking-[0.08em] text-[#57554E] mb-2">
+                  <span class="mono-data font-semibold">03 · 06:35 AM</span> — WORKSHOP ROUTING
+                </div>
+                <h3 class="font-heading text-[21px] font-bold text-[#181816] mb-2.5">
+                  Automated Bay 2 work order dispatch
+                </h3>
+                <p class="text-[15px] leading-[1.6] text-[#57554E]">
+                  Work order <span class="mono-data text-[13px] font-semibold text-[#181816]">#WO-8821</span> opens automatically, reserves brake caliper inventory, and assigns Lead Tech Marco Rossi before the driver arrives.
+                </p>
+              </article>
+
+              <!-- Chapter 04 -->
+              <article
+                data-story-chapter="3"
+                onclick="activateStoryStage(3, true)"
+                class="story-chapter cursor-pointer transition-opacity duration-200 opacity-55 hover:opacity-90"
+              >
+                <div class="text-[11px] font-medium uppercase tracking-[0.08em] text-[#57554E] mb-2">
+                  <span class="mono-data font-semibold">04 · 09:10 AM</span> — COMPLIANCE LEDGER
+                </div>
+                <h3 class="font-heading text-[21px] font-bold text-[#181816] mb-2.5">
+                  Verified repair &amp; compliance ledger
+                </h3>
+                <p class="text-[15px] leading-[1.6] text-[#57554E]">
+                  Post-repair telemetry confirms nominal pressure. Digital sign-off, parts cost, and warranty documentation lock permanently into the asset record.
+                </p>
+              </article>
+            </div>
+          </div>
+
+          <!-- Right Column: Sticky Operational Telemetry Frame (7 cols, top: 84px) -->
+          <div class="lg:col-span-7 lg:sticky lg:top-[84px]">
+            <div class="bg-[#FFFFFF] border border-[#E4E3DD] rounded-[6px] overflow-hidden">
+
+              <!-- Frame Top Status Strip -->
+              <div class="px-5 py-3 bg-[#F7F7F5] border-b border-[#E4E3DD] flex items-center justify-between">
+                <div class="flex items-center gap-2 text-[12px]">
+                  <span class="w-[6px] h-[6px] rounded-full bg-[#D9481E]"></span>
+                  <span id="storyFrameHeaderLabel" class="font-medium text-[#181816]">
+                    Stage <span class="mono-data">01</span> · Dawn Sensor Anomaly
+                  </span>
+                </div>
+                <span class="mono-data text-[11px] font-medium text-[#57554E] px-2 py-0.5 rounded-[4px] bg-[#EBEAE4] border border-[#E4E3DD]">
+                  KA-01-MX-3434
+                </span>
+              </div>
+
+              <!-- Cross-Fade Stack of 4 Operational Views -->
+              <div class="crossfade-stack p-6 sm:p-7 min-h-[340px]">
+
+                <!-- VIEW 01: DAWN SENSOR ANOMALY -->
+                <div id="storyView0" class="crossfade-panel is-active flex flex-col justify-between space-y-5">
+                  <div class="flex items-start justify-between gap-4 border-b border-[#E4E3DD] pb-4">
+                    <div>
+                      <div class="text-[11px] font-medium uppercase tracking-[0.08em] text-[#B91C1C] mb-1">
+                        EARLY WARNING SIGNAL · <span class="mono-data">06:12:04 AM</span>
+                      </div>
+                      <h4 class="font-heading text-[20px] font-bold text-[#181816]">
+                        Hydraulic Line Pressure Threshold Breach
+                      </h4>
+                    </div>
+                    <span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-[4px] text-[11px] font-medium bg-[#FEF2F2] text-[#B91C1C] border border-[#FECACA] shrink-0">
+                      <span class="w-[6px] h-[6px] rounded-full bg-[#DC2626]"></span>
+                      Critical
+                    </span>
+                  </div>
+
+                  <div class="p-4 rounded-[6px] bg-[#FEF5F1] border border-[#F5C7B8] space-y-1.5">
+                    <div class="text-[13px] font-semibold text-[#181816]">
+                      Pre-ignition brake fluid pressure dropped <span class="mono-data text-[#B91C1C]">-14.2%</span> below safe baseline (<span class="mono-data">820 kPa</span>).
+                    </div>
+                    <div class="text-[12px] text-[#57554E]">
+                      Captured automatically via OBD-II gateway before vehicle departed Depot North.
+                    </div>
+                  </div>
+
+                  <div class="grid grid-cols-3 gap-3">
+                    <div class="p-3 rounded-[6px] bg-[#FAFAF9] border border-[#E4E3DD]">
+                      <div class="text-[11px] uppercase text-[#6E6B63] mb-1">DEPOT BAY</div>
+                      <div class="mono-data text-[13px] font-semibold text-[#181816]">NORTH-B04</div>
+                    </div>
+                    <div class="p-3 rounded-[6px] bg-[#FAFAF9] border border-[#E4E3DD]">
+                      <div class="text-[11px] uppercase text-[#6E6B63] mb-1">ODOMETER</div>
+                      <div class="mono-data text-[13px] font-semibold text-[#181816]">42,890 km</div>
+                    </div>
+                    <div class="p-3 rounded-[6px] bg-[#FAFAF9] border border-[#E4E3DD]">
+                      <div class="text-[11px] uppercase text-[#6E6B63] mb-1">DOWNTIME RISK</div>
+                      <div class="mono-data text-[13px] font-semibold text-[#B91C1C]">HIGH</div>
+                    </div>
+                  </div>
+                </div>
+
+                <!-- VIEW 02: INSTANT CAN BUS DIAGNOSTIC TRIAGE -->
+                <div id="storyView1" class="crossfade-panel flex flex-col justify-between space-y-5">
+                  <div class="flex items-start justify-between gap-4 border-b border-[#E4E3DD] pb-4">
+                    <div>
+                      <div class="text-[11px] font-medium uppercase tracking-[0.08em] text-[#92400E] mb-1">
+                        CAN BUS TRIAGE · <span class="mono-data">06:18:19 AM</span>
+                      </div>
+                      <h4 class="font-heading text-[20px] font-bold text-[#181816]">
+                        Fault Code <span class="mono-data">P0552</span> Decoded &amp; Prioritized
+                      </h4>
+                    </div>
+                    <span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-[4px] text-[11px] font-medium bg-[#FFFBEB] text-[#92400E] border border-[#FDE68A] shrink-0">
+                      <span class="w-[6px] h-[6px] rounded-full bg-[#D97706]"></span>
+                      Attention
+                    </span>
+                  </div>
+
+                  <div class="p-4 rounded-[6px] bg-[#FAFAF9] border border-[#E4E3DD] space-y-2">
+                    <div class="flex items-center justify-between text-[12px]">
+                      <span class="font-semibold text-[#181816]">Sub-System Identification</span>
+                      <span class="mono-data font-semibold text-[#181816]">LEVEL 2 SEVERITY</span>
+                    </div>
+                    <p class="text-[13px] text-[#57554E] leading-[1.55]">
+                      Brake &amp; power steering pressure sensor circuit low input. Cross-referenced with front-left pad wear log (<span class="mono-data text-[#181816]">2.1 mm</span> remaining).
+                    </p>
+                  </div>
+
+                  <div class="space-y-2">
+                    <div class="flex justify-between text-[12px]">
+                      <span class="text-[#57554E]">Diagnostic Match Confidence</span>
+                      <span class="mono-data font-bold text-[#181816]">99.4%</span>
+                    </div>
+                    <div class="w-full h-[6px] rounded-[4px] bg-[#EBEAE4] overflow-hidden">
+                      <div class="h-full bg-[#D9481E] rounded-[4px]" style="width: 99.4%"></div>
+                    </div>
+                  </div>
+                </div>
+
+                <!-- VIEW 03: AUTOMATED BAY 2 WORK ORDER DISPATCH -->
+                <div id="storyView2" class="crossfade-panel flex flex-col justify-between space-y-5">
+                  <div class="flex items-start justify-between gap-4 border-b border-[#E4E3DD] pb-4">
+                    <div>
+                      <div class="text-[11px] font-medium uppercase tracking-[0.08em] text-[#92400E] mb-1">
+                        WORKFLOW DISPATCH · <span class="mono-data">06:35:00 AM</span>
+                      </div>
+                      <h4 class="font-heading text-[20px] font-bold text-[#181816]">
+                        Work Order <span class="mono-data">#WO-8821</span> Assigned to Bay 2
+                      </h4>
+                    </div>
+                    <span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-[4px] text-[11px] font-medium bg-[#FFFBEB] text-[#92400E] border border-[#FDE68A] shrink-0">
+                      <span class="w-[6px] h-[6px] rounded-full bg-[#D97706]"></span>
+                      In Progress
+                    </span>
+                  </div>
+
+                  <div class="border border-[#E4E3DD] rounded-[6px] divide-y divide-[#E4E3DD] text-[13px]">
+                    <div class="px-4 py-2.5 flex justify-between">
+                      <span class="text-[#57554E]">Assigned Technician</span>
+                      <span class="font-semibold text-[#181816]">Marco Rossi · Workshop Bay 2</span>
+                    </div>
+                    <div class="px-4 py-2.5 flex justify-between">
+                      <span class="text-[#57554E]">Reserved Part SKU</span>
+                      <span class="mono-data font-semibold text-[#181816]">#BRK-CAL-99 (Shelf B-12)</span>
+                    </div>
+                    <div class="px-4 py-2.5 flex justify-between">
+                      <span class="text-[#57554E]">Route Continuity</span>
+                      <span class="font-medium text-[#166534]">Backup Van <span class="mono-data">#MH-02</span> dispatched (0 min delay)</span>
+                    </div>
+                  </div>
+                </div>
+
+                <!-- VIEW 04: VERIFIED REPAIR & COMPLIANCE LEDGER -->
+                <div id="storyView3" class="crossfade-panel flex flex-col justify-between space-y-5">
+                  <div class="flex items-start justify-between gap-4 border-b border-[#E4E3DD] pb-4">
+                    <div>
+                      <div class="text-[11px] font-medium uppercase tracking-[0.08em] text-[#166534] mb-1">
+                        AUDIT LEDGER LOCKED · <span class="mono-data">09:10:42 AM</span>
+                      </div>
+                      <h4 class="font-heading text-[20px] font-bold text-[#181816]">
+                        Certified Road Ready &amp; Indexed
+                      </h4>
+                    </div>
+                    <span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-[4px] text-[11px] font-medium bg-[#F0FDF4] text-[#166534] border border-[#BBF7D0] shrink-0">
+                      <span class="w-[6px] h-[6px] rounded-full bg-[#16A34A]"></span>
+                      Healthy
+                    </span>
+                  </div>
+
+                  <div class="p-4 rounded-[6px] bg-[#F0FDF4] border border-[#BBF7D0] space-y-1.5">
+                    <div class="text-[13px] font-semibold text-[#166534]">
+                      Work Order <span class="mono-data">#WO-8821</span> Closed · Hydraulic pressure restored to <span class="mono-data">960 kPa</span>.
+                    </div>
+                    <div class="mono-data text-[11px] text-[#57554E]">
+                      SHA-256 Audit Entry: 8bfa92c4...ec41 · Warranty claim auto-archived
+                    </div>
+                  </div>
+
+                  <div class="grid grid-cols-2 gap-3">
+                    <div class="p-3 rounded-[6px] bg-[#FAFAF9] border border-[#E4E3DD]">
+                      <div class="text-[11px] uppercase text-[#6E6B63] mb-1">TOTAL TURNAROUND</div>
+                      <div class="mono-data text-[18px] font-bold text-[#181816]">2 hrs 35 min</div>
+                    </div>
+                    <div class="p-3 rounded-[6px] bg-[#FAFAF9] border border-[#E4E3DD]">
+                      <div class="text-[11px] uppercase text-[#6E6B63] mb-1">ASSET HEALTH SCORE</div>
+                      <div class="mono-data text-[18px] font-bold text-[#166534]">99.8%</div>
+                    </div>
+                  </div>
+                </div>
+
+              </div>
+
+              <!-- Frame Bottom Stepper Controls -->
+              <div class="px-5 py-3 bg-[#F7F7F5] border-t border-[#E4E3DD] flex items-center justify-between text-[12px]">
+                <span class="text-[#6E6B63]">Select stage to inspect:</span>
+                <div class="flex items-center gap-1.5">
+                  <button
+                    type="button"
+                    onclick="activateStoryStage(0, true)"
+                    data-step-btn="0"
+                    class="story-step-btn mono-data w-7 h-6 rounded-[4px] border border-[#181816] bg-[#181816] text-[#FFFFFF] text-[11px] font-semibold cursor-pointer"
+                  >
+                    01
+                  </button>
+                  <button
+                    type="button"
+                    onclick="activateStoryStage(1, true)"
+                    data-step-btn="1"
+                    class="story-step-btn mono-data w-7 h-6 rounded-[4px] border border-[#CFCBC2] bg-[#FFFFFF] text-[#57554E] hover:bg-[#F1F0EC] text-[11px] font-semibold cursor-pointer"
+                  >
+                    02
+                  </button>
+                  <button
+                    type="button"
+                    onclick="activateStoryStage(2, true)"
+                    data-step-btn="2"
+                    class="story-step-btn mono-data w-7 h-6 rounded-[4px] border border-[#CFCBC2] bg-[#FFFFFF] text-[#57554E] hover:bg-[#F1F0EC] text-[11px] font-semibold cursor-pointer"
+                  >
+                    03
+                  </button>
+                  <button
+                    type="button"
+                    onclick="activateStoryStage(3, true)"
+                    data-step-btn="3"
+                    class="story-step-btn mono-data w-7 h-6 rounded-[4px] border border-[#CFCBC2] bg-[#FFFFFF] text-[#57554E] hover:bg-[#F1F0EC] text-[11px] font-semibold cursor-pointer"
+                  >
+                    04
+                  </button>
+                </div>
+              </div>
+
+            </div>
+          </div>
+
+        </div>
+      </div>
+    </section>
+
+    <!-- ════════════════════════════════════════════════════════════════
+         5. ONBOARDING SECTION ("Simple to start. Ready for the day-to-day.")
+    ════════════════════════════════════════════════════════════════ -->
+    <section id="how-it-works" class="max-w-[1200px] mx-auto px-4 sm:px-6 py-16 lg:py-24">
+      <div class="grid grid-cols-1 lg:grid-cols-12 gap-10 lg:gap-12 items-start">
+
+        <!-- Left Editorial Intro (5 cols) -->
+        <div class="lg:col-span-5">
+          <div class="text-[11px] font-medium uppercase tracking-[0.08em] text-[#57554E] mb-3">
+            GET STARTED AT YOUR PACE
+          </div>
+          <h2 class="font-heading text-[28px] sm:text-[34px] font-bold leading-[1.15] text-[#181816] mb-4">
+            Simple to start. Ready for the day-to-day.
+          </h2>
+          <p class="text-[15px] leading-[1.6] text-[#57554E] mb-6">
+            Bring your fleet records into one structured board in minutes—without complex hardware retrofits or week-long training.
+          </p>
+          <button
+            type="button"
+            onclick="openAuthModal('signup')"
+            class="inline-flex items-center gap-1.5 text-[14px] font-medium text-[#1D4ED8] hover:text-[#1E40AF] cursor-pointer"
+          >
+            <span>Create your telfay account</span>
+            <span aria-hidden="true">→</span>
+          </button>
+        </div>
+
+        <!-- Right 1px Hairline-Separated Rows inside a 6px-Radius Panel (7 cols) -->
+        <div class="lg:col-span-7 bg-[#FFFFFF] border border-[#E4E3DD] rounded-[6px] divide-y divide-[#E4E3DD] overflow-hidden">
+          <!-- Row 01 -->
+          <div
+            onclick="highlightOnboardRow(0)"
+            data-onboard-row="0"
+            class="onboard-row p-6 bg-[#FAFAF9] transition-colors duration-150 cursor-pointer"
+          >
+            <div class="flex items-start gap-4">
+              <span class="mono-data w-9 h-9 rounded-[4px] bg-[#D9481E] border border-[#D9481E] text-[#FFFFFF] flex items-center justify-center text-[13px] font-bold shrink-0">
+                01
+              </span>
+              <div class="flex-1">
+                <h3 class="font-heading text-[16px] font-semibold text-[#181816] mb-1">
+                  Set up your workspace
+                </h3>
+                <p class="text-[14px] text-[#57554E] leading-[1.55]">
+                  Create an account and import your vehicle registration numbers, odometer baselines, and team roles.
+                </p>
+                <div class="onboard-detail mt-2.5 pt-2.5 border-t border-[#E4E3DD] text-[12px] text-[#181816] font-medium">
+                  Supports bulk CSV upload or instant single-plate entry.
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Row 02 -->
+          <div
+            onclick="highlightOnboardRow(1)"
+            data-onboard-row="1"
+            class="onboard-row p-6 bg-[#FFFFFF] hover:bg-[#F1F0EC] transition-colors duration-150 cursor-pointer"
+          >
+            <div class="flex items-start gap-4">
+              <span class="mono-data w-9 h-9 rounded-[4px] bg-[#F7F7F5] border border-[#CFCBC2] text-[#181816] flex items-center justify-center text-[13px] font-bold shrink-0">
+                02
+              </span>
+              <div class="flex-1">
+                <h3 class="font-heading text-[16px] font-semibold text-[#181816] mb-1">
+                  See the full picture
+                </h3>
+                <p class="text-[14px] text-[#57554E] leading-[1.55]">
+                  Review vehicle health status, active CAN bus fault codes, and upcoming preventive service intervals.
+                </p>
+                <div class="onboard-detail hidden mt-2.5 pt-2.5 border-t border-[#E4E3DD] text-[12px] text-[#181816] font-medium">
+                  Color-coded triage highlights healthy, due-soon, and critical assets at a glance.
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Row 03 -->
+          <div
+            onclick="highlightOnboardRow(2)"
+            data-onboard-row="2"
+            class="onboard-row p-6 bg-[#FFFFFF] hover:bg-[#F1F0EC] transition-colors duration-150 cursor-pointer"
+          >
+            <div class="flex items-start gap-4">
+              <span class="mono-data w-9 h-9 rounded-[4px] bg-[#F7F7F5] border border-[#CFCBC2] text-[#181816] flex items-center justify-center text-[13px] font-bold shrink-0">
+                03
+              </span>
+              <div class="flex-1">
+                <h3 class="font-heading text-[16px] font-semibold text-[#181816] mb-1">
+                  Keep work moving
+                </h3>
+                <p class="text-[14px] text-[#57554E] leading-[1.55]">
+                  Dispatch service requests, assign workshop bays, and close every repair with a permanent audit log.
+                </p>
+                <div class="onboard-detail hidden mt-2.5 pt-2.5 border-t border-[#E4E3DD] text-[12px] text-[#181816] font-medium">
+                  Full lifecycle status tracking from initial report to road-ready sign-off.
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+      </div>
+    </section>
+
+    <!-- ════════════════════════════════════════════════════════════════
+         6. DARK CHARCOAL CTA BANNER (#181816 solid, 6px radius, ZERO gradients)
+    ════════════════════════════════════════════════════════════════ -->
+    <section class="max-w-[1200px] mx-auto px-4 sm:px-6 pb-16">
+      <div class="rounded-[6px] bg-[#181816] border border-[#2E2E2A] p-8 sm:p-12 flex flex-col lg:flex-row lg:items-center lg:justify-between gap-8">
+        <div class="max-w-[580px]">
+          <div class="text-[11px] font-medium uppercase tracking-[0.08em] text-[#D9481E] mb-2.5">
+            YOUR TELFAY WORKSPACE
+          </div>
+          <h2 class="font-heading text-[28px] sm:text-[34px] font-bold leading-[1.15] text-[#F7F7F5] mb-3">
+            Bring your fleet into clearer view.
+          </h2>
+          <p class="text-[15px] leading-[1.6] text-[#A8A59E]">
+            Start organizing vehicle records, diagnostics, and maintenance workflows in one flat operational board.
+          </p>
+        </div>
+
+        <div class="flex flex-wrap items-center gap-3 shrink-0">
+          <button
+            type="button"
+            onclick="openAuthModal('signup')"
+            class="h-[40px] px-5 rounded-[4px] bg-[#D9481E] hover:bg-[#BF3B15] text-[#FFFFFF] text-[14px] font-medium inline-flex items-center gap-2 transition-colors duration-150 cursor-pointer"
+          >
+            <span>Get Started</span>
+            <span aria-hidden="true">→</span>
+          </button>
+
+          <button
+            type="button"
+            onclick="openAuthModal('signin')"
+            class="h-[40px] px-5 rounded-[4px] bg-transparent hover:bg-[#262623] text-[#F7F7F5] border border-[#3F3E3A] text-[14px] font-medium transition-colors duration-150 cursor-pointer"
+          >
+            Sign In
+          </button>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <!-- ════════════════════════════════════════════════════════════════
+       7. MINIMAL SWISS FOOTER (1px hairline top border)
+  ════════════════════════════════════════════════════════════════ -->
+  <footer class="w-full bg-[#F7F7F5] border-t border-[#E4E3DD] py-8 px-4 sm:px-6">
+    <div class="max-w-[1200px] mx-auto flex flex-col sm:flex-row items-center justify-between gap-4 text-[13px] text-[#6E6B63]">
+      <a href="#top" class="inline-flex items-center gap-2">
+        <div class="w-6 h-6 rounded-[12px] bg-[#FFFFFF] border border-[#CFCBC2] flex items-center justify-center">
+          <svg width="15" height="15" viewBox="0 0 40 40" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+            <path d="M20 3.5L6.5 8.8V19.6C6.5 28.4 12.2 35.4 20 37.5C27.8 35.4 33.5 28.4 33.5 19.6V8.8L20 3.5Z" stroke="#181816" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round" />
+            <path d="M5.5 20.5H12.5L15.4 15.8L18.8 24.8L22.2 18.2L28.5 12.2" stroke="#D9481E" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" />
+            <path d="M23.8 11.8H29V17" stroke="#D9481E" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" />
+          </svg>
+        </div>
+        <span class="font-heading font-extrabold text-[16px] tracking-[-0.03em]">
+          <span class="text-[#181816]">tel</span><span class="text-[#D9481E]">fay</span>
+        </span>
+      </a>
+
+      <div>Clearer fleet operations, all in one place.</div>
+
+      <div>© <span class="mono-data">2026</span> telfay</div>
+    </div>
+  </footer>
+
+  <!-- ════════════════════════════════════════════════════════════════
+       8. INTERACTIVE AUTH / WORKSPACE MODAL (6px radius, 1px border, zero shadow)
+  ════════════════════════════════════════════════════════════════ -->
+  <div
+    id="authModalBackdrop"
+    role="dialog"
+    aria-modal="true"
+    aria-labelledby="authModalHeading"
+    onclick="closeAuthModal()"
+    class="fixed inset-0 z-50 hidden items-center justify-center p-4 bg-[#181816]/40"
+  >
+    <div
+      onclick="event.stopPropagation()"
+      class="w-full max-w-[380px] bg-[#FFFFFF] border border-[#CFCBC2] rounded-[6px] p-6"
+    >
+      <div class="flex items-center justify-between mb-5">
+        <div class="inline-flex items-center gap-2">
+          <div class="w-7 h-7 rounded-[12px] bg-[#F7F7F5] border border-[#CFCBC2] flex items-center justify-center">
+            <svg width="16" height="16" viewBox="0 0 40 40" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+              <path d="M20 3.5L6.5 8.8V19.6C6.5 28.4 12.2 35.4 20 37.5C27.8 35.4 33.5 28.4 33.5 19.6V8.8L20 3.5Z" stroke="#181816" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round" />
+              <path d="M5.5 20.5H12.5L15.4 15.8L18.8 24.8L22.2 18.2L28.5 12.2" stroke="#D9481E" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" />
+              <path d="M23.8 11.8H29V17" stroke="#D9481E" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" />
+            </svg>
+          </div>
+          <span class="font-heading font-extrabold text-[18px] tracking-[-0.03em]">
+            <span class="text-[#181816]">tel</span><span class="text-[#D9481E]">fay</span>
+          </span>
+        </div>
+
+        <button
+          type="button"
+          onclick="closeAuthModal()"
+          aria-label="Close dialog"
+          class="w-7 h-7 rounded-[4px] border border-transparent hover:border-[#CFCBC2] hover:bg-[#F1F0EC] text-[#57554E] flex items-center justify-center text-[15px] cursor-pointer"
+        >
+          ✕
+        </button>
+      </div>
+
+      <div id="authFormContainer">
+        <div class="text-[11px] font-medium uppercase tracking-[0.08em] text-[#1D4ED8] mb-1">
+          FLEET OPERATIONS WORKSPACE
+        </div>
+        <h3 id="authModalHeading" class="font-heading text-[22px] font-bold text-[#181816] mb-1.5">
+          Create your telfay workspace
+        </h3>
+        <p id="authModalSub" class="text-[13px] text-[#57554E] mb-5">
+          Set up your operational board to track vehicle records, diagnostics, and service requests.
+        </p>
+
+        <form onsubmit="submitAuthForm(event)" class="space-y-3.5">
+          <div id="authNameField">
+            <label for="authNameInput" class="block text-[12px] font-medium text-[#181816] mb-1">
+              Full Name <span class="text-[#DC2626]">*</span>
+            </label>
+            <input
+              id="authNameInput"
+              type="text"
+              required
+              placeholder="e.g. Vikas Kannur"
+              class="w-full h-[36px] px-3 rounded-[4px] bg-[#FAFAF9] border border-[#CFCBC2] text-[14px] text-[#181816]"
+            />
+          </div>
+
+          <div>
+            <label for="authEmailInput" class="block text-[12px] font-medium text-[#181816] mb-1">
+              Work Email <span class="text-[#DC2626]">*</span>
+            </label>
+            <input
+              id="authEmailInput"
+              type="email"
+              required
+              placeholder="ops@company.com"
+              class="w-full h-[36px] px-3 rounded-[4px] bg-[#FAFAF9] border border-[#CFCBC2] text-[14px] text-[#181816]"
+            />
+          </div>
+
+          <div id="authFleetField">
+            <label for="authFleetSelect" class="block text-[12px] font-medium text-[#181816] mb-1">
+              Fleet Size
+            </label>
+            <select
+              id="authFleetSelect"
+              class="w-full h-[36px] px-3 rounded-[4px] bg-[#FAFAF9] border border-[#CFCBC2] text-[13px] text-[#181816]"
+            >
+              <option>1–10 commercial vehicles</option>
+              <option selected>10–25 commercial vehicles</option>
+              <option>25–100 commercial vehicles</option>
+              <option>100+ enterprise fleet</option>
+            </select>
+          </div>
+
+          <button
+            type="submit"
+            id="authSubmitBtn"
+            class="w-full h-[36px] rounded-[4px] bg-[#D9481E] hover:bg-[#BF3B15] text-[#FFFFFF] text-[13px] font-medium transition-colors duration-150 cursor-pointer mt-1"
+          >
+            Launch Workspace
+          </button>
+        </form>
+
+        <div class="mt-4 pt-3.5 border-t border-[#E4E3DD] text-center text-[13px] text-[#57554E]">
+          <span id="authSwitchPrompt">Already have an account?</span>
+          <button
+            type="button"
+            id="authSwitchBtn"
+            onclick="toggleAuthMode()"
+            class="font-medium text-[#1D4ED8] hover:text-[#1E40AF] ml-1 cursor-pointer"
+          >
+            Sign In
+          </button>
+        </div>
+      </div>
+
+      <div id="authSuccessContainer" class="hidden py-3 space-y-4">
+        <div class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-[4px] text-[11px] font-medium bg-[#F0FDF4] text-[#166534] border border-[#BBF7D0]">
+          <span class="w-[6px] h-[6px] rounded-full bg-[#16A34A]"></span>
+          Workspace Initialized
+        </div>
+        <h4 class="font-heading text-[20px] font-bold text-[#181816]">
+          You're ready to operate.
+        </h4>
+        <p id="authSuccessMsg" class="text-[13px] text-[#57554E] leading-[1.55]">
+          Your telfay workspace is ready. Test the live Fleet Manager &amp; Driver Report board directly on this page.
+        </p>
+        <button
+          type="button"
+          onclick="closeAuthModal()"
+          class="w-full h-[36px] rounded-[4px] bg-[#181816] text-[#FFFFFF] text-[13px] font-medium cursor-pointer"
+        >
+          Return to Operational Desk
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ════════════════════════════════════════════════════════════════
+       9. INTERACTIVE LOGIC (TABS, DRIVER REPORT, GSAP SCROLLTRIGGER, THREE.JS)
+  ════════════════════════════════════════════════════════════════ -->
+  <script>
+    // ── 1. HERO SANDBOX ROLE TOGGLE (Fleet Manager vs Driver Report) ──
+    function switchSandboxMode(mode) {
+      const managerPanel = document.getElementById('panelManagerView');
+      const driverPanel = document.getElementById('panelDriverView');
+      const btnManager = document.getElementById('btnRoleManager');
+      const btnDriver = document.getElementById('btnRoleDriver');
+      const slider = document.getElementById('roleSlider');
+
+      if (mode === 'driver') {
+        managerPanel.classList.remove('is-active');
+        driverPanel.classList.add('is-active');
+        slider.style.transform = 'translateX(100%)';
+        btnManager.classList.replace('text-[#181816]', 'text-[#57554E]');
+        btnDriver.classList.replace('text-[#57554E]', 'text-[#181816]');
+        btnManager.setAttribute('aria-selected', 'false');
+        btnDriver.setAttribute('aria-selected', 'true');
+      } else {
+        driverPanel.classList.remove('is-active');
+        managerPanel.classList.add('is-active');
+        slider.style.transform = 'translateX(0)';
+        btnDriver.classList.replace('text-[#181816]', 'text-[#57554E]');
+        btnManager.classList.replace('text-[#57554E]', 'text-[#181816]');
+        btnDriver.setAttribute('aria-selected', 'false');
+        btnManager.setAttribute('aria-selected', 'true');
+      }
+    }
+
+    // ── 2. MANAGER SUB-TABS ('Vehicles', 'Diagnostics', 'Requests') ──
+    function switchManagerTab(tab) {
+      const panels = {
+        vehicles: document.getElementById('tabVehicles'),
+        diagnostics: document.getElementById('tabDiagnostics'),
+        requests: document.getElementById('tabRequests'),
+      };
+      const buttons = {
+        vehicles: document.getElementById('subBtnVehicles'),
+        diagnostics: document.getElementById('subBtnDiagnostics'),
+        requests: document.getElementById('subBtnRequests'),
+      };
+      const offsets = {
+        vehicles: '0%',
+        diagnostics: '100%',
+        requests: '200%',
+      };
+
+      const slider = document.getElementById('subTabSlider');
+      if (slider) slider.style.transform = `translateX(${offsets[tab]})`;
+
+      Object.keys(panels).forEach((key) => {
+        const isTarget = key === tab;
+        panels[key].classList.toggle('is-active', isTarget);
+        buttons[key].setAttribute('aria-selected', isTarget ? 'true' : 'false');
+        if (isTarget) {
+          buttons[key].classList.remove('text-[#57554E]');
+          buttons[key].classList.add('text-[#181816]');
+        } else {
+          buttons[key].classList.remove('text-[#181816]');
+          buttons[key].classList.add('text-[#57554E]');
+        }
+      });
+    }
+
+    // ── 3. DRIVER QUICK-REPORT SIMULATOR (< 30s) ──
+    let selectedIssueLabel = 'Brake Pad Wear';
+    let selectedIssueSeverity = 'Critical';
+    let workOrderCounter = 8822;
+    let openRequestsCount = 2;
+    let criticalFleetCount = 1;
+
+    function selectIssueTag(btnEl, label, severity) {
+      selectedIssueLabel = label;
+      selectedIssueSeverity = severity;
+
+      document.querySelectorAll('.issue-tag-btn').forEach((b) => {
+        b.className =
+          'issue-tag-btn h-[36px] px-2 rounded-[4px] border border-[#CFCBC2] bg-[#FFFFFF] text-[#57554E] hover:bg-[#F1F0EC] text-[12px] font-medium transition-colors duration-150 cursor-pointer truncate';
+      });
+
+      btnEl.className =
+        'issue-tag-btn h-[36px] px-2 rounded-[4px] border border-[#D9481E] bg-[#FEF5F1] text-[#D9481E] text-[12px] font-medium transition-colors duration-150 cursor-pointer truncate';
+    }
+
+    function submitDriverReport(e) {
+      e.preventDefault();
+      const plate = document.getElementById('driverPlateSelect').value;
+      const note = document.getElementById('driverNoteInput').value.trim();
+      const woId = `#WO-${workOrderCounter++}`;
+
+      // Increment counters
+      openRequestsCount += 1;
+      document.getElementById('requestCountBadge').textContent = openRequestsCount;
+
+      if (selectedIssueSeverity === 'Critical') {
+        criticalFleetCount += 1;
+        document.getElementById('criticalMetricCount').textContent = criticalFleetCount;
+      }
+
+      // Prepend to Live Dispatch Feed
+      const dispatchList = document.getElementById('liveDispatchList');
+      const isCrit = selectedIssueSeverity === 'Critical';
+      const dispatchRow = document.createElement('div');
+      dispatchRow.className = `px-4 py-3 flex items-center justify-between gap-3 ${
+        isCrit ? 'bg-[#FEF5F1]' : 'bg-[#FFFFFF]'
+      } hover:bg-[#F1F0EC] transition-colors duration-150`;
+
+      dispatchRow.innerHTML = `
+        <div class="flex items-center gap-2.5 min-w-0">
+          <span class="mono-data text-[13px] font-semibold text-[#181816] shrink-0">${plate}</span>
+          <span class="text-[#CFCBC2]">·</span>
+          <span class="text-[13px] text-[#181816] truncate">${selectedIssueLabel}${note ? ' — ' + note : ''}</span>
+        </div>
+        <span class="inline-flex items-center gap-1.5 px-2 py-1 rounded-[4px] text-[11px] font-medium ${
+          isCrit
+            ? 'bg-[#FEF2F2] text-[#B91C1C] border border-[#FECACA]'
+            : 'bg-[#FFFBEB] text-[#92400E] border border-[#FDE68A]'
+        } shrink-0">
+          <span class="w-[6px] h-[6px] rounded-full ${isCrit ? 'bg-[#DC2626]' : 'bg-[#D97706]'}"></span>
+          ${isCrit ? 'Critical' : 'Attention'}
+        </span>
+      `;
+      dispatchList.prepend(dispatchRow);
+
+      // Prepend to Service Requests Queue
+      const reqList = document.getElementById('serviceRequestsList');
+      const reqRow = document.createElement('div');
+      reqRow.className =
+        'px-4 py-3 flex items-center justify-between gap-3 hover:bg-[#F1F0EC] transition-colors duration-150';
+      reqRow.innerHTML = `
+        <div class="min-w-0">
+          <div class="flex items-center gap-2 mb-0.5">
+            <span class="mono-data text-[12px] font-bold text-[#D9481E]">${woId}</span>
+            <span class="mono-data text-[12px] font-semibold text-[#181816]">${plate}</span>
+          </div>
+          <div class="text-[13px] font-medium text-[#181816] truncate">${selectedIssueLabel}${note ? ' · ' + note : ''}</div>
+        </div>
+        <button
+          type="button"
+          onclick="cycleWorkOrderStatus(this)"
+          data-stage="Attention"
+          title="Click to advance workflow stage"
+          class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-[4px] text-[11px] font-medium bg-[#FFFBEB] text-[#92400E] border border-[#FDE68A] shrink-0 cursor-pointer"
+        >
+          <span class="w-[6px] h-[6px] rounded-full bg-[#D97706]"></span>
+          <span>Pending</span>
+        </button>
+      `;
+      reqList.prepend(reqRow);
+
+      // Show confirmation banner & switch back to Fleet Manager View
+      const banner = document.getElementById('newTicketAlertBanner');
+      const bannerText = document.getElementById('newTicketAlertText');
+      bannerText.innerHTML = `Work order <strong class="mono-data">${woId}</strong> dispatched for <strong class="mono-data">${plate}</strong> (${selectedIssueLabel}).`;
+      banner.classList.remove('hidden');
+
+      switchSandboxMode('manager');
+      switchManagerTab('requests');
+    }
+
+    // Cycle Work Order status tags inline
+    function cycleWorkOrderStatus(btn) {
+      const current = btn.getAttribute('data-stage');
+      if (current === 'Attention' || current === 'In Progress') {
+        btn.setAttribute('data-stage', 'Healthy');
+        btn.className =
+          'inline-flex items-center gap-1.5 px-2.5 py-1 rounded-[4px] text-[11px] font-medium bg-[#F0FDF4] text-[#166534] border border-[#BBF7D0] shrink-0 cursor-pointer';
+        btn.innerHTML = '<span class="w-[6px] h-[6px] rounded-full bg-[#16A34A]"></span><span>Completed</span>';
+      } else {
+        btn.setAttribute('data-stage', 'In Progress');
+        btn.className =
+          'inline-flex items-center gap-1.5 px-2.5 py-1 rounded-[4px] text-[11px] font-medium bg-[#FFFBEB] text-[#92400E] border border-[#FDE68A] shrink-0 cursor-pointer';
+        btn.innerHTML = '<span class="w-[6px] h-[6px] rounded-full bg-[#D97706]"></span><span>In Progress</span>';
+      }
+    }
+
+    // ── 4. EDITORIAL SCROLLYTELLING (GSAP ScrollTrigger + Fallback) ──
+    const storyHeaderLabels = [
+      'Stage <span class="mono-data">01</span> · Dawn Sensor Anomaly',
+      'Stage <span class="mono-data">02</span> · CAN Bus Diagnostic Triage',
+      'Stage <span class="mono-data">03</span> · Automated Bay 2 Dispatch',
+      'Stage <span class="mono-data">04</span> · Verified Audit Ledger',
+    ];
+
+    let activeStoryIdx = 0;
+
+    function activateStoryStage(idx, shouldScroll = false) {
+      activeStoryIdx = idx;
+
+      // Update left rail height (25%, 50%, 75%, 100%)
+      const rail = document.getElementById('storyRailProgress');
+      if (rail) rail.style.height = `${(idx + 1) * 25}%`;
+
+      // Update right frame header
+      const headerLabel = document.getElementById('storyFrameHeaderLabel');
+      if (headerLabel) headerLabel.innerHTML = storyHeaderLabels[idx];
+
+      // Cross-fade right views
+      for (let i = 0; i < 4; i++) {
+        const view = document.getElementById(`storyView${i}`);
+        if (view) view.classList.toggle('is-active', i === idx);
+      }
+
+      // Highlight active left chapter
+      document.querySelectorAll('.story-chapter').forEach((el) => {
+        const chIdx = parseInt(el.getAttribute('data-story-chapter'), 10);
+        const eyebrow = el.querySelector('div');
+        if (chIdx === idx) {
+          el.classList.remove('opacity-55');
+          el.classList.add('opacity-100');
+          if (eyebrow) {
+            eyebrow.classList.remove('text-[#57554E]');
+            eyebrow.classList.add('text-[#D9481E]');
+          }
+        } else {
+          el.classList.remove('opacity-100');
+          el.classList.add('opacity-55');
+          if (eyebrow) {
+            eyebrow.classList.remove('text-[#D9481E]');
+            eyebrow.classList.add('text-[#57554E]');
+          }
+        }
+      });
+
+      // Update desktop bottom step buttons
+      document.querySelectorAll('.story-step-btn').forEach((btn) => {
+        const bIdx = parseInt(btn.getAttribute('data-step-btn'), 10);
+        if (bIdx === idx) {
+          btn.className =
+            'story-step-btn mono-data w-7 h-6 rounded-[4px] border border-[#181816] bg-[#181816] text-[#FFFFFF] text-[11px] font-semibold cursor-pointer';
+        } else {
+          btn.className =
+            'story-step-btn mono-data w-7 h-6 rounded-[4px] border border-[#CFCBC2] bg-[#FFFFFF] text-[#57554E] hover:bg-[#F1F0EC] text-[11px] font-semibold cursor-pointer';
+        }
+      });
+
+      // Update mobile pills
+      document.querySelectorAll('.mobile-story-pill').forEach((pill) => {
+        const pIdx = parseInt(pill.getAttribute('data-mobile-pill'), 10);
+        if (pIdx === idx) {
+          pill.className =
+            'mobile-story-pill px-3 py-1.5 rounded-[4px] border border-[#181816] bg-[#181816] text-[#FFFFFF] text-[12px] font-medium whitespace-nowrap cursor-pointer';
+        } else {
+          pill.className =
+            'mobile-story-pill px-3 py-1.5 rounded-[4px] border border-[#CFCBC2] bg-[#FFFFFF] text-[#57554E] text-[12px] font-medium whitespace-nowrap cursor-pointer';
+        }
+      });
+
+      if (shouldScroll && window.innerWidth >= 1024) {
+        const targetEl = document.querySelector(`[data-story-chapter="${idx}"]`);
+        if (targetEl) {
+          targetEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        }
+      }
+    }
+
+    // Initialize GSAP ScrollTrigger if available
+    window.addEventListener('DOMContentLoaded', () => {
+      if (typeof gsap !== 'undefined' && typeof ScrollTrigger !== 'undefined') {
+        gsap.registerPlugin(ScrollTrigger);
+        document.querySelectorAll('.story-chapter').forEach((chapterEl, index) => {
+          ScrollTrigger.create({
+            trigger: chapterEl,
+            start: 'top 55%',
+            end: 'bottom 45%',
+            onEnter: () => activateStoryStage(index, false),
+            onEnterBack: () => activateStoryStage(index, false),
+          });
+        });
+      }
+    });
+
+    // ── 5. ONBOARDING INTERACTIVE ROW HIGHLIGHT ──
+    function highlightOnboardRow(idx) {
+      document.querySelectorAll('.onboard-row').forEach((row) => {
+        const rIdx = parseInt(row.getAttribute('data-onboard-row'), 10);
+        const badge = row.querySelector('span.mono-data');
+        const detail = row.querySelector('.onboard-detail');
+        if (rIdx === idx) {
+          row.classList.remove('bg-[#FFFFFF]');
+          row.classList.add('bg-[#FAFAF9]');
+          if (badge) {
+            badge.className =
+              'mono-data w-9 h-9 rounded-[4px] bg-[#D9481E] border border-[#D9481E] text-[#FFFFFF] flex items-center justify-center text-[13px] font-bold shrink-0';
+          }
+          if (detail) detail.classList.remove('hidden');
+        } else {
+          row.classList.remove('bg-[#FAFAF9]');
+          row.classList.add('bg-[#FFFFFF]');
+          if (badge) {
+            badge.className =
+              'mono-data w-9 h-9 rounded-[4px] bg-[#F7F7F5] border border-[#CFCBC2] text-[#181816] flex items-center justify-center text-[13px] font-bold shrink-0';
+          }
+          if (detail) detail.classList.add('hidden');
+        }
+      });
+    }
+
+    // ── 6. INTERACTIVE AUTH MODAL ──
+    let currentAuthMode = 'signup';
+
+    function openAuthModal(mode) {
+      currentAuthMode = mode || 'signup';
+      renderAuthMode();
+      document.getElementById('authFormContainer').classList.remove('hidden');
+      document.getElementById('authSuccessContainer').classList.add('hidden');
+      const backdrop = document.getElementById('authModalBackdrop');
+      backdrop.classList.remove('hidden');
+      backdrop.classList.add('flex');
+    }
+
+    function closeAuthModal() {
+      const backdrop = document.getElementById('authModalBackdrop');
+      backdrop.classList.add('hidden');
+      backdrop.classList.remove('flex');
+    }
+
+    function toggleAuthMode() {
+      currentAuthMode = currentAuthMode === 'signup' ? 'signin' : 'signup';
+      renderAuthMode();
+    }
+
+    function renderAuthMode() {
+      const isSignup = currentAuthMode === 'signup';
+      document.getElementById('authModalHeading').textContent = isSignup
+        ? 'Create your telfay workspace'
+        : 'Sign in to telfay';
+      document.getElementById('authModalSub').textContent = isSignup
+        ? 'Set up your operational board to track vehicle records, diagnostics, and service requests.'
+        : 'Enter your work email to access your live fleet board.';
+      document.getElementById('authNameField').style.display = isSignup ? 'block' : 'none';
+      document.getElementById('authNameInput').required = isSignup;
+      document.getElementById('authFleetField').style.display = isSignup ? 'block' : 'none';
+      document.getElementById('authSubmitBtn').textContent = isSignup
+        ? 'Launch Workspace'
+        : 'Continue to Dashboard';
+      document.getElementById('authSwitchPrompt').textContent = isSignup
+        ? 'Already have an account?'
+        : 'New to telfay?';
+      document.getElementById('authSwitchBtn').textContent = isSignup ? 'Sign In' : 'Create Workspace';
+    }
+
+    function submitAuthForm(e) {
+      e.preventDefault();
+      const email = document.getElementById('authEmailInput').value.trim();
+      document.getElementById('authFormContainer').classList.add('hidden');
+      document.getElementById('authSuccessContainer').classList.remove('hidden');
+      document.getElementById('authSuccessMsg').textContent =
+        `Your telfay workspace is ready for ${email || 'your fleet team'}. Explore the live Operational Desk right on this page.`;
+    }
+
+    // Close modal on Escape key
+    window.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape') closeAuthModal();
+    });
+
+    // ── 7. THREE.JS ARCHITECTURAL WIREFRAME TELEMETRY MESH (REDUCED-MOTION & VIEWPORT AWARE) ──
+    (function initTelemetryWireframe() {
+      const container = document.getElementById('threejs-telemetry-bg');
+      if (!container || typeof THREE === 'undefined') return;
+
+      // Respect user reduced-motion preference
+      const prefersReducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+      if (prefersReducedMotion) return;
+
+      let width = container.clientWidth || 640;
+      let height = container.clientHeight || 480;
+
+      const scene = new THREE.Scene();
+      const camera = new THREE.PerspectiveCamera(42, width / height, 1, 1000);
+      camera.position.set(0, 12, 165);
+
+      const renderer = new THREE.WebGLRenderer({ alpha: true, antialias: true });
+      renderer.setSize(width, height);
+      renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
+      container.appendChild(renderer.domElement);
+
+      const group = new THREE.Group();
+      scene.add(group);
+
+      // Subtle architectural wireframe icosahedron + telemetry route nodes
+      const wireGeo = new THREE.IcosahedronGeometry(56, 1);
+      const wireMat = new THREE.MeshBasicMaterial({
+        color: 0x181816,
+        wireframe: true,
+        transparent: true,
+        opacity: 0.35,
+      });
+      const wireMesh = new THREE.Mesh(wireGeo, wireMat);
+      group.add(wireMesh);
+
+      // Highlight telemetry nodes at vertices in Signal Vermilion
+      const posAttr = wireGeo.attributes.position;
+      const pointsMat = new THREE.PointsMaterial({
+        color: 0xD9481E,
+        size: 3.0,
+        transparent: true,
+        opacity: 0.85,
+      });
+      const points = new THREE.Points(wireGeo, pointsMat);
+      group.add(points);
+
+      let isVisible = true;
+      let animFrameId = null;
+
+      // Pause rendering when hero scrolls off-screen
+      if ('IntersectionObserver' in window) {
+        const observer = new IntersectionObserver(
+          (entries) => {
+            entries.forEach((entry) => {
+              isVisible = entry.isIntersecting;
+              if (isVisible && !animFrameId) {
+                animate();
+              }
+            });
+          },
+          { threshold: 0.05 }
+        );
+        observer.observe(container);
+      }
+
+      function animate() {
+        if (!isVisible) {
+          animFrameId = null;
+          return;
+        }
+        animFrameId = requestAnimationFrame(animate);
+        group.rotation.y += 0.0014;
+        group.rotation.x = 0.24;
+        renderer.render(scene, camera);
+      }
+      animate();
+
+      window.addEventListener('resize', () => {
+        if (!container) return;
+        width = container.clientWidth || 640;
+        height = container.clientHeight || 480;
+        camera.aspect = width / height;
+        camera.updateProjectionMatrix();
+        renderer.setSize(width, height);
+      });
+    })();
+  </script>
+</body>
+</html>
